@@ -150,7 +150,7 @@
   "discounts": {
     "new_customer_max_pct": 10,
     "returning_customer_max_pct": 15,
-    "returning_customer_note": "Self-declared by customer — not verified (no auth in this demo). Accepted in good faith as per business policy."
+    "returning_customer_note": "Automatically detected via Luffa uid history when available. Falls back to self-declaration for web frontend users."
   },
 
   "negotiation": {

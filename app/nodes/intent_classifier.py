@@ -2,7 +2,7 @@
 Intent Classifier — runs once per session (passes through if intent already set).
 
 Classifies the customer's primary intent and extracts initial context:
-  - customer_type (self-declared, never verified)
+  - customer_type (auto-detected via Luffa uid when available, self-declared as fallback)
   - postcode (if mentioned)
 
 For non-quote intents, the LLM also drafts the customer-facing response,
@@ -77,9 +77,15 @@ def intent_classifier_node(state: QuoteState) -> Dict[str, Any]:
             *get_safe_messages(state),
         ])
 
+        # Only upgrade, never downgrade — uid-verified returning status takes priority
+        if result.customer_type == "returning" or state.get("customer_type") == "returning":
+            derived_type = "returning"
+        else:
+            derived_type = result.customer_type
+
         updates: Dict[str, Any] = {
             "intent": result.intent,
-            "customer_type": result.customer_type,
+            "customer_type": derived_type,
         }
         # Store the non-quote response so output_guard can use it
         if result.non_quote_response:

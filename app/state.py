@@ -41,10 +41,11 @@ class QuoteState(TypedDict):
     escalation_reason: Optional[str]
 
     # ── Customer Context ─────────────────────────────────────────────────────
-    # customer_type is SELF-DECLARED by the customer — never verified.
-    # Accepted in good faith per business policy (see discounts config).
+    # customer_type is auto-detected via Luffa uid history when available,
+    # otherwise self-declared by the customer (web frontend fallback).
     customer_type: str                  # "new" | "returning"
     boiler_brand: Optional[str]         # confirmed supported brand (Vaillant/Baxi/Ideal)
+    luffa_uid: Optional[str]           # Luffa user ID, None for web frontend sessions
     postcode: Optional[str]
     ulez_zone: Optional[str]            # "inner" | "outer" | "outside"
 
@@ -91,7 +92,7 @@ class QuoteState(TypedDict):
     retry_count: int
 
 
-def initial_state(session_id: str, customer_name: str, customer_type: str = "new") -> Dict[str, Any]:
+def initial_state(session_id: str, customer_name: str, customer_type: str = "new", luffa_uid: str = None) -> Dict[str, Any]:
     """Returns a fully-populated initial state dict for a new session."""
     return {
         "messages": [],
@@ -112,6 +113,7 @@ def initial_state(session_id: str, customer_name: str, customer_type: str = "new
         "escalation_reason": None,
         "customer_type": customer_type,
         "boiler_brand": None,
+        "luffa_uid": luffa_uid,
         "postcode": None,
         "ulez_zone": None,
         "urgency_tier": None,

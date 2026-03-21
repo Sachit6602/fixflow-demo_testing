@@ -43,6 +43,12 @@ def load_availability() -> Dict[str, Any]:
         return json.load(f)
 
 
+@lru_cache(maxsize=1)
+def load_engineers() -> Dict[str, Any]:
+    with open(DATA_DIR / "engineers.json", "r") as f:
+        return json.load(f)
+
+
 def get_ulez_zone(postcode: str) -> str:
     """
     Return 'inner', 'outer', or 'outside' for a given postcode string.
