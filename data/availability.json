@@ -1,0 +1,17 @@
+{
+  "slots": {
+    "same_day": [
+      { "id": "sd_001", "date": "today", "time": "14:00–16:00" },
+      { "id": "sd_002", "date": "today", "time": "16:00–18:00" }
+    ],
+    "evening_weekend": [
+      { "id": "ew_001", "date": "today", "time": "18:00–20:00" },
+      { "id": "ew_002", "date": "today", "time": "20:00–22:00" }
+    ],
+    "next_day": [
+      { "id": "nd_001", "date": "tomorrow", "time": "08:00–10:00" },
+      { "id": "nd_002", "date": "tomorrow", "time": "10:00–12:00" },
+      { "id": "nd_003", "date": "tomorrow", "time": "14:00–16:00" }
+    ]
+  }
+}

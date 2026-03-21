@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuoteFlow — Instant Plumbing &amp; Boiler Quotes</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Landing View ──────────────────────────────────────────────────────── -->
+  <div id="landing" class="view active">
+    <div class="landing-container">
+
+      <div class="brand">
+        <div class="brand-icon">🔧</div>
+        <h1>QuoteFlow</h1>
+        <p class="tagline">Instant plumbing &amp; boiler quotes, 24/7.</p>
+      </div>
+
+      <div class="cards">
+
+        <!-- Guest card -->
+        <div class="card" id="guest-card">
+          <div class="card-icon">👤</div>
+          <h2>Continue as Guest</h2>
+          <p>Quick quote with no account needed.</p>
+          <div class="name-input-group">
+            <input type="text" id="guest-name" placeholder="Your first name" maxlength="50" autocomplete="given-name" />
+            <button class="btn btn-secondary" onclick="startSession(false)">Start Quote →</button>
+          </div>
+        </div>
+
+        <!-- Returning customer card -->
+        <div class="card card-highlight" id="login-card">
+          <div class="card-badge">💰 Up to 10% off</div>
+          <div class="card-icon">⭐</div>
+          <h2>Returning Customer</h2>
+          <p>Log in to unlock your loyalty discount on every quote.</p>
+          <div class="name-input-group">
+            <input type="text" id="returning-name" placeholder="Your first name" maxlength="50" autocomplete="given-name" />
+            <button class="btn btn-primary" onclick="startSession(true)">Log In &amp; Save →</button>
+          </div>
+        </div>
+
+      </div><!-- /cards -->
+
+      <p class="footer-note">No account signup required &bull; Quotes valid for 24 hours &bull; London coverage</p>
+    </div>
+  </div>
+
+  <!-- ── Chat View ─────────────────────────────────────────────────────────── -->
+  <div id="chat" class="view">
+
+    <header class="chat-header">
+      <div class="chat-header-left">
+        <button class="back-btn" onclick="goBack()">← Back</button>
+        <span class="brand-name">QuoteFlow</span>
+      </div>
+      <div class="chat-header-right">
+        <span id="header-customer" class="customer-badge"></span>
+        <span id="header-type" class="type-badge type-guest"></span>
+      </div>
+    </header>
+
+    <!-- Guest nudge banner (hidden for returning customers) -->
+    <div id="guest-banner" class="guest-banner">
+      <span>💡 <strong>Returning customers get a discount</strong> on every quote.</span>
+      <button class="banner-btn" onclick="showLoginPrompt()">Log in to unlock it →</button>
+    </div>
+
+    <div id="messages" class="messages"></div>
+
+    <div class="input-area">
+      <input
+        type="text"
+        id="user-input"
+        placeholder="Describe your problem…"
+        autocomplete="off"
+        onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+      />
+      <button class="btn btn-primary send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+
+  </div>
+
+  <!-- ── Returning-customer upgrade modal ──────────────────────────────────── -->
+  <div id="login-modal" class="modal" style="display:none" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-box">
+      <h3>Unlock Your Loyalty Discount</h3>
+      <p>Confirm your name to start a fresh session with your returning-customer discount applied.</p>
+      <input type="text" id="modal-name" placeholder="Your first name" maxlength="50"
+             onkeydown="if(event.key==='Enter') upgradeToReturning()" />
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="upgradeToReturning()">Apply Discount</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

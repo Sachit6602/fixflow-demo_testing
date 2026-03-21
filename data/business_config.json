@@ -1,0 +1,175 @@
+{
+  "business": {
+    "name": "FixFlow Plumbing & Boiler Services",
+    "location": "London",
+    "phone": "020 7946 0000",
+    "email": "hello@fixflow.co.uk"
+  },
+
+  "supported_brands": ["Vaillant", "Baxi", "Ideal"],
+
+  "supported_job_types": {
+    "boiler_repressurise": {
+      "base_price": 85,
+      "price_range_medium": [75, 110],
+      "price_range_low": [75, 140],
+      "floor_price": 75,
+      "includes_parts": false,
+      "typical_parts_estimate": 0,
+      "description": "Boiler pressure restoration",
+      "self_help": {
+        "title": "You may be able to fix this yourself in 5 minutes",
+        "intro": "Low boiler pressure (below 1 bar) is one of the most common boiler issues — and it's often something you can fix yourself without a callout.",
+        "steps": [
+          "Turn off the boiler and let it cool for 10 minutes.",
+          "Locate the filling loop — it's usually a silver flexible hose with one or two valves under or beside the boiler.",
+          "Slowly open the valves (turn them so the slot aligns with the pipe). You'll hear water filling.",
+          "Watch the pressure gauge. When it reaches 1.0–1.5 bar, close the valves.",
+          "Turn your boiler back on. If the E118 error clears, you're done."
+        ],
+        "warning": "If pressure keeps dropping within 24 hours, there may be a leak in the system — that needs a professional.",
+        "followup": "Give it a try and let me know how it goes. If it doesn't fix it, or you'd rather have a Gas Safe engineer do it, I can get you a quote right now."
+      }
+    },
+    "boiler_minor_repair": {
+      "base_price": 120,
+      "price_range_medium": [100, 160],
+      "price_range_low": [100, 200],
+      "floor_price": 100,
+      "includes_parts": true,
+      "typical_parts_estimate": 30,
+      "description": "Minor boiler repair (thermostat, valve, sensor)"
+    },
+    "boiler_service": {
+      "base_price": 95,
+      "price_range_medium": [85, 120],
+      "price_range_low": [85, 145],
+      "floor_price": 85,
+      "includes_parts": false,
+      "typical_parts_estimate": 0,
+      "description": "Annual boiler service and safety check"
+    },
+    "boiler_replacement": {
+      "base_price": 2500,
+      "price_range_medium": [2000, 3500],
+      "price_range_low": [2000, 4000],
+      "floor_price": 2000,
+      "includes_parts": true,
+      "typical_parts_estimate": 1500,
+      "description": "Full boiler replacement",
+      "always_escalate": true
+    },
+    "emergency_plumbing": {
+      "base_price": 150,
+      "price_range_medium": [130, 200],
+      "price_range_low": [130, 250],
+      "floor_price": 130,
+      "includes_parts": true,
+      "typical_parts_estimate": 40,
+      "description": "Emergency plumbing repair (leak, burst pipe)"
+    },
+    "pipe_repair": {
+      "base_price": 110,
+      "price_range_medium": [90, 150],
+      "price_range_low": [90, 180],
+      "floor_price": 90,
+      "includes_parts": true,
+      "typical_parts_estimate": 25,
+      "description": "Pipe repair or section replacement"
+    }
+  },
+
+  "coverage": {
+    "areas": ["London"],
+    "not_covered_message": "We currently cover London postcodes only. For areas outside London, please contact a local approved engineer."
+  },
+
+  "ulez_zones": {
+    "inner": {
+      "postcodes": [
+        "EC1", "EC2", "EC3", "EC4",
+        "WC1", "WC2",
+        "E1", "E2", "E3", "E8", "E9",
+        "N1", "N4", "N5", "N7",
+        "SE1", "SE5", "SE11", "SE17",
+        "SW1", "SW3", "SW6", "SW7", "SW10",
+        "W1", "W2", "W6", "W8", "W11", "W14"
+      ],
+      "surcharge": 15,
+      "label": "Central London / Inner ULEZ"
+    },
+    "outer": {
+      "postcodes": [
+        "E4", "E5", "E6", "E7", "E10", "E11", "E12", "E13", "E14", "E15", "E16", "E17", "E18",
+        "N2", "N3", "N6", "N8", "N9", "N10", "N11", "N12", "N13", "N14", "N15", "N16", "N17", "N18", "N19", "N20", "N21", "N22",
+        "NW1", "NW2", "NW3", "NW4", "NW5", "NW6", "NW7", "NW8", "NW9", "NW10", "NW11",
+        "SE2", "SE3", "SE4", "SE6", "SE7", "SE8", "SE9", "SE10", "SE12", "SE13", "SE14", "SE15", "SE16", "SE18", "SE19", "SE20", "SE21", "SE22", "SE23", "SE24", "SE25", "SE26", "SE27", "SE28",
+        "SW2", "SW4", "SW8", "SW9", "SW11", "SW12", "SW13", "SW14", "SW15", "SW16", "SW17", "SW18", "SW19", "SW20",
+        "W3", "W4", "W5", "W7", "W9", "W10", "W12", "W13"
+      ],
+      "surcharge": 10,
+      "label": "Greater London / Expanded ULEZ"
+    },
+    "outside": {
+      "postcodes": [],
+      "surcharge": 0,
+      "label": "Outside ULEZ zone"
+    }
+  },
+
+  "urgency_tiers": {
+    "same_day": {
+      "multiplier": 1.5,
+      "label": "Same-day callout",
+      "description": "Weekday daytime, booked same day before 6pm"
+    },
+    "evening_weekend": {
+      "multiplier": 1.5,
+      "label": "Evening / weekend callout",
+      "description": "After 6pm weekdays, or any time on Saturday or Sunday"
+    },
+    "next_day": {
+      "multiplier": 1.0,
+      "label": "Next-day appointment",
+      "description": "Standard rate for next available weekday slot"
+    }
+  },
+
+  "authority_thresholds": {
+    "auto_confirm_below": 300,
+    "human_review_min": 300,
+    "human_review_max": 800,
+    "hard_block_above": 800
+  },
+
+  "discounts": {
+    "new_customer_max_pct": 10,
+    "returning_customer_max_pct": 15,
+    "returning_customer_note": "Self-declared by customer — not verified (no auth in this demo). Accepted in good faith as per business policy."
+  },
+
+  "negotiation": {
+    "competitor_match_enabled": false,
+    "max_negotiation_rounds": 2,
+    "value_propositions": [
+      "Gas Safe registered engineers",
+      "Same-day availability",
+      "12-month workmanship guarantee",
+      "Fully insured — public liability covered",
+      "Transparent pricing — no hidden call-out fees"
+    ]
+  },
+
+  "gas_safety": {
+    "emergency_line": "0800 111 999",
+    "hard_stop_message": "This sounds like it could be a gas leak. Do not use any electrical switches. Leave the property immediately and call the Gas Emergency line: 0800 111 999. Do not return until the property has been declared safe by an engineer.",
+    "keywords": [
+      "sulphur", "sulphurous",
+      "rotten egg", "rotten eggs", "egg smell", "smells like eggs",
+      "gas smell", "gas smells", "gas fumes", "gas odour", "gas odor",
+      "gas leak", "gas leaking", "smell gas", "smells gas", "smells like gas",
+      "carbon monoxide", "co alarm", "co detector", "co leak",
+      "burning smell from boiler", "acrid smell"
+    ]
+  }
+}

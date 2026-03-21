@@ -1,0 +1,12 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+
+# LangChain / LangGraph / LangSmith
+langchain>=0.3.0
+langchain-openai>=0.3.0
+langgraph>=0.2.0
+langsmith>=0.2.0
+
+# Pydantic (used by FastAPI and structured outputs)
+pydantic>=2.7.0
