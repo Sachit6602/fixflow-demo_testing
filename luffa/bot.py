@@ -30,7 +30,9 @@ load_dotenv()
 
 LUFFA_SECRET = os.environ["LUFFA_SECRET"]
 LUFFA_BASE = "https://apibot.luffa.im"
-FIXFLOW_BASE = os.environ.get("FIXFLOW_BASE_URL", "http://localhost:8000")
+# On Railway, PORT is set by the platform. Bot runs in-process, so use localhost.
+_port = os.environ.get("PORT", "8000")
+FIXFLOW_BASE = os.environ.get("FIXFLOW_BASE_URL", f"http://localhost:{_port}")
 BUSINESS_NAME = "FixFlow Plumbing"
 
 # uid -> session_id mapping (in-memory, lost on restart)
