@@ -6,9 +6,9 @@ def process_payment(amount, from_uid, provider_name):
     tx_ref = "0x" + uuid.uuid4().hex[:16]
 
     print(f"\n--- PAYMENT INITIATED ---")
-    print(f"Amount:    £{amount} deposit")
+    print(f"Amount:    £{amount}")
     print(f"From:      {from_uid}")
-    print(f"To:        {provider_name} escrow")
+    print(f"To:        {provider_name}")
     print(f"Tx ref:    {tx_ref}")
 
     time.sleep(1)
@@ -20,9 +20,9 @@ def process_payment(amount, from_uid, provider_name):
         "amount": amount,
         "currency": "GBP",
         "from": from_uid,
-        "to": f"{provider_name}_escrow",
+        "to": provider_name,
         "chain": "endless",
-        "type": "deposit_escrow"
+        "type": "payment"
     })
 
     time.sleep(1)
@@ -30,24 +30,31 @@ def process_payment(amount, from_uid, provider_name):
 
     time.sleep(1)
     print(f"Status:    Confirmed ✓")
-    print(f"Escrow:    Active — releases on job completion")
     print(f"--- PAYMENT COMPLETE ---\n")
 
     return tx_ref
 
 
-def get_payment_message():
-    """Return the deposit prompt message with confirm/cancel options."""
+def get_payment_message(quote_ref, final_price):
+    """Return a payment prompt message based on the actual quote."""
     return {
-        "text": "SparkClean available at 8am for £185.\nA £37 deposit is required to confirm.\n\nReply with:\n1 - Confirm & Pay\n2 - Cancel"
+        "text": (
+            f"Quote {quote_ref} — £{final_price:.2f}\n"
+            f"Payment of £{final_price:.2f} is required to confirm your booking.\n\n"
+            "Reply with:\n"
+            "1 - Confirm & Pay\n"
+            "2 - Cancel"
+        ),
     }
 
 
 def handle_payment_confirmation(uid, provider_name, amount):
-    """Process a payment and return a formatted escrow confirmation message."""
+    """Process a payment and return a formatted confirmation message."""
     tx_ref = process_payment(amount, uid, provider_name)
     return (
-        f"Deposit confirmed.\n\n"
+        f"Payment confirmed.\n\n"
         f"Transaction: {tx_ref}\n"
-        f"£{amount} held in escrow — releases automatically when {provider_name} completes the job."
+        f"£{amount} paid to {provider_name}.\n\n"
+        f"Your engineer will arrive at your selected time slot. "
+        f"You'll receive a confirmation with their details shortly."
     )
