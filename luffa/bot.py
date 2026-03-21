@@ -2,7 +2,8 @@
 Luffa Bot Adapter for FixFlow.
 
 Polls the Luffa messaging API for incoming messages and routes them
-through FixFlow's REST API (/api/session/start, /api/chat).
+through FixFlow's REST API (/api/session/start-luffa, /api/chat).
+Returning users are auto-detected via Supabase quote history.
 
 Usage:
     1. Start FixFlow:  uvicorn app.main:app --reload
@@ -56,10 +57,18 @@ def ensure_session(uid: str) -> str:
     if uid in active_sessions:
         return active_sessions[uid]
 
-    # Create a new FixFlow session
+    # Check if server already has an active session for this uid
+    lookup = requests.get(f"{FIXFLOW_BASE}/api/session/lookup", params={"luffa_uid": uid})
+    if lookup.ok:
+        session_id = lookup.json()["session_id"]
+        active_sessions[uid] = session_id
+        print(f"[FixFlow] Resumed session for {uid}: {session_id}")
+        return session_id
+
+    # Create a new FixFlow session with uid-based returning user detection
     resp = requests.post(
-        f"{FIXFLOW_BASE}/api/session/start",
-        json={"customer_name": "Customer", "is_returning": False},
+        f"{FIXFLOW_BASE}/api/session/start-luffa",
+        json={"luffa_uid": uid, "customer_name": "Customer"},
     )
     resp.raise_for_status()
     data = resp.json()
@@ -67,9 +76,11 @@ def ensure_session(uid: str) -> str:
     session_id = data["session_id"]
     active_sessions[uid] = session_id
 
+    status = "returning" if data["is_returning"] else "new"
+    print(f"[FixFlow] Session created for {uid} ({status}): {session_id}")
+
     # Send the welcome message to the user
     send_message(uid, data["message"])
-    print(f"[FixFlow] Session created for {uid}: {session_id}")
     return session_id
 
 

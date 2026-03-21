@@ -13,3 +13,6 @@ pydantic>=2.7.0
 
 # Luffa bot adapter
 requests>=2.31.0
+
+# Supabase (user persistence + quote history)
+supabase>=2.0.0

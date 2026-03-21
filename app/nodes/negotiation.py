@@ -5,10 +5,8 @@ Detects price pushback in the latest customer message using the LLM structured
 output. If pushback is detected, applies a discount up to the configured max for
 the customer type. Floor price is enforced as a hard cap regardless of LLM output.
 
-Returning customer status is SELF-DECLARED (customer says "I'm a returning
-customer"). The system accepts this in good faith per business policy — there is
-no auth or session history to verify it. This is clearly called out in the
-business_config.json discounts.returning_customer_note field.
+Returning customer status is automatically detected via Luffa uid history when
+available. Falls back to self-declaration for web frontend users.
 
 After negotiation_round reaches the configured max, no further discounts are
 offered regardless of continued pushback.
@@ -30,7 +28,7 @@ Current quote:
   Job:               {job_type}
   Calculated price:  £{calculated_price:.2f}
   Floor price:       £{floor_price:.2f}  ← NEVER go below this
-  Customer type:     {customer_type} (self-declared — accepted in good faith)
+  Customer type:     {customer_type} (verified via account history when available, otherwise self-declared)
   Max discount:      {max_discount}%
   Negotiation round: {negotiation_round} (max: {max_rounds})
   Urgency applied:   {urgency_multiplier}×
