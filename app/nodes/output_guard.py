@@ -30,7 +30,7 @@ def _format_slots(slots: list) -> str:
         return "  No slots available — please call us directly."
     lines = []
     for i, slot in enumerate(slots[:3], 1):
-        lines.append(f"  {i}. {slot['date']}  {slot['time']}")
+        lines.append(f"  {i}. {slot['date']}: {slot['time']}")
     return "\n".join(lines)
 
 
@@ -177,6 +177,17 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
                 "phase": "self_help",
                 "self_help_offered": True,
             }
+
+    # ── Post-quote (quote already sent, no new negotiation response) ─────────
+    if state.get("quote_issued") and not next_q:
+        text = (
+            "Your quote has been sent! If you'd like to discuss it or need "
+            "a new quote for a different issue, just let us know."
+        )
+        return {
+            "messages": [AIMessage(content=text)],
+            "phase": "ended",
+        }
 
     # ── Quote response ────────────────────────────────────────────────────────
     final_price = state.get("final_price") or state.get("calculated_price")
