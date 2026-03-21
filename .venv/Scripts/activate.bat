@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=D:\Documents\QuoteFlow\.venv
+set VIRTUAL_ENV=C:\Users\knowk\Downloads\Projects\fixflow-demo_testing\.venv
 
 if not defined PROMPT set PROMPT=$P$G
 

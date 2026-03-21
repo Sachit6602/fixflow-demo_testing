@@ -14,17 +14,17 @@ Data storage: quotes persisted to Supabase; session state in-memory via LangGrap
 """
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import uuid
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
-
-load_dotenv()
 
 from pathlib import Path
 
@@ -32,7 +32,22 @@ from app.graph import get_graph
 from app.config import load_business_config
 from app.state import initial_state
 
+import os
+import threading
+
 app = FastAPI(title="FixFlow API", version="1.0.0", docs_url="/docs")
+
+
+@app.on_event("startup")
+def start_luffa_bot():
+    """Launch Luffa bot polling in a background thread if LUFFA_SECRET is set."""
+    if os.environ.get("LUFFA_SECRET") and os.environ.get("LUFFA_SECRET") != "your_luffa_secret_here":
+        from luffa.bot import main_loop
+        thread = threading.Thread(target=main_loop, daemon=True)
+        thread.start()
+        print("[App] Luffa bot started as background thread")
+    else:
+        print("[App] LUFFA_SECRET not set — Luffa bot disabled")
 
 _FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=_FRONTEND_DIR), name="static")

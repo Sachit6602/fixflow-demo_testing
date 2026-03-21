@@ -75,6 +75,17 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
     if not last_is_human:
         return {}
 
+    # ── /end command — goodbye ────────────────────────────────────────────────
+    if state.get("phase") == "ended":
+        text = (
+            "Thanks for using FixFlow! If you need help again, just start a new conversation. "
+            f"For urgent issues, call us anytime at **{config['business']['phone']}**."
+        )
+        return {
+            "messages": [AIMessage(content=text)],
+            "phase": "ended",
+        }
+
     # ── Safety hard stop ──────────────────────────────────────────────────────
     if state.get("safety_triggered"):
         if state.get("safety_type") == "gas_smell":
@@ -105,9 +116,11 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
                 f"Thanks for getting in touch. Please call us at **{config['business']['phone']}** "
                 "and our team will be happy to help."
             )
+        # Stay alive — reset to intake so next message gets re-classified
         return {
             "messages": [AIMessage(content=text)],
-            "phase": "ended",
+            "phase": "intake",
+            "intent": None,
             "next_diagnostic_question": None,
         }
 

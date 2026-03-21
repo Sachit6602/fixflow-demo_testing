@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="D:\Documents\QuoteFlow\.venv"
+VIRTUAL_ENV="C:\Users\knowk\Downloads\Projects\fixflow-demo_testing\.venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

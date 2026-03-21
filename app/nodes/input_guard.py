@@ -197,6 +197,10 @@ def input_guard_node(state: QuoteState) -> Dict[str, Any]:
     if not latest:
         return {"safety_triggered": False, "safety_type": None}
 
+    # ── /end command — customer explicitly ends the conversation ───────────
+    if latest.strip().lower() == "/end":
+        return {"safety_triggered": False, "safety_type": None, "phase": "ended"}
+
     # ── Postcode fast-path ────────────────────────────────────────────────────
     # When we are waiting for a postcode, skip all LLM calls entirely.
     # Only the regex safety checks below run — a postcode cannot trigger them.

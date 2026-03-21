@@ -47,6 +47,34 @@ pending_payments: dict[str, dict] = {}
 # Deduplication: track processed message IDs
 seen_ids: set[str] = set()
 
+# uid -> last activity timestamp (for inactivity timeout)
+last_activity: dict[str, float] = {}
+SESSION_TIMEOUT_SECS = 120  # 2 minutes
+
+
+def clear_session(uid: str):
+    """Remove all in-memory state for a uid so next message starts fresh."""
+    active_sessions.pop(uid, None)
+    pending_slot_selection.pop(uid, None)
+    pending_payments.pop(uid, None)
+    last_activity.pop(uid, None)
+    print(f"[Session] Cleared for {uid}")
+
+
+def check_timeouts():
+    """Send timeout message and clear sessions inactive for >2 minutes."""
+    now = time.time()
+    timed_out = [
+        uid for uid, ts in last_activity.items()
+        if now - ts > SESSION_TIMEOUT_SECS
+    ]
+    for uid in timed_out:
+        send_message(uid, (
+            "It looks like you've been away for a bit — this session has timed out. "
+            "Send a new message anytime to start a fresh conversation!"
+        ))
+        clear_session(uid)
+
 
 def get_messages() -> list:
     """Poll Luffa for new incoming messages."""
@@ -96,11 +124,14 @@ def ensure_session(uid: str) -> str:
 
     # Send the welcome message to the user
     send_message(uid, data["message"])
+    last_activity[uid] = time.time()
     return session_id
 
 
 def handle_text_message(uid: str, text: str):
     """Forward a user message to FixFlow and relay the response back via Luffa."""
+    last_activity[uid] = time.time()
+
     # Check if user is responding to a payment prompt
     if uid in pending_payments:
         handle_payment_response(uid, text)
@@ -121,6 +152,7 @@ def handle_text_message(uid: str, text: str):
     if resp.ok:
         data = resp.json()
         reply = data["response"]
+        phase = data.get("phase")
         quote_ref = data.get("quote_reference")
 
         if quote_ref:
@@ -128,8 +160,13 @@ def handle_text_message(uid: str, text: str):
 
         send_message(uid, reply)
 
+        # Session ended (/end command, safety hard-stop, etc.) — clear so next msg starts fresh
+        if phase == "ended":
+            clear_session(uid)
+            return
+
         # If a quote was just issued, wait for slot selection
-        if quote_ref and data.get("phase") == "quoting":
+        if quote_ref and phase == "quoting":
             quotes_resp = requests.get(
                 f"{FIXFLOW_BASE}/api/quotes",
                 params={"session_id": session_id},
@@ -222,7 +259,8 @@ def process(data):
                 handle_text_message(uid, text)
 
 
-if __name__ == "__main__":
+def main_loop():
+    """Main polling loop — can be run standalone or as a background thread."""
     print(f"[Luffa Bot] Starting — polling {LUFFA_BASE}")
     print(f"[Luffa Bot] FixFlow API at {FIXFLOW_BASE}")
 
@@ -230,9 +268,14 @@ if __name__ == "__main__":
         try:
             data = get_messages()
             process(data)
+            check_timeouts()
         except KeyboardInterrupt:
             print("\n[Luffa Bot] Shutting down.")
             break
         except Exception as e:
             print(f"[Luffa Bot] Error: {e}")
         time.sleep(1)
+
+
+if __name__ == "__main__":
+    main_loop()
