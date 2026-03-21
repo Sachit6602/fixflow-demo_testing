@@ -45,6 +45,10 @@ def _build_pricing_breakdown(state: QuoteState, config: dict) -> str:
     if multiplier > 1.0:
         tier_label = config["urgency_tiers"].get(urgency_tier, {}).get("label", urgency_tier)
         lines.append(f"  • {tier_label} surcharge (×{multiplier})")
+    elif 0 < multiplier < 1.0:
+        tier_label = config["urgency_tiers"].get(urgency_tier, {}).get("label", urgency_tier)
+        saving_pct = round((1.0 - multiplier) * 100)
+        lines.append(f"  • {tier_label} (−{saving_pct}% off standard rate)")
     if ulez_surcharge > 0:
         zone_label = config["ulez_zones"].get(ulez_zone, {}).get("label", "")
         lines.append(f"  • ULEZ surcharge ({zone_label}): +£{ulez_surcharge:.2f}")
@@ -63,10 +67,12 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
     config = load_business_config()
     messages = state.get("messages", [])
 
-    # ── Guard: don't double-respond ───────────────────────────────────────────
-    # If the last message in state is already an AI message, this turn already
-    # has a response (e.g. added by a previous node or a previous run). Skip.
-    if messages and getattr(messages[-1], "type", None) == "ai":
+    # ── Guard: don't double-respond within a single invocation ───────────────
+    # With phase-based routing, the previous AI message in state belongs to a
+    # prior turn. We only skip if the LAST message is already AI (meaning
+    # another node in this same invocation already added a response).
+    last_is_human = messages and getattr(messages[-1], "type", None) == "human"
+    if not last_is_human:
         return {}
 
     # ── Safety hard stop ──────────────────────────────────────────────────────
@@ -143,13 +149,27 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             "phase": "escalated",
         }
 
-    # ── Negotiation response (already composed by negotiation node) ───────────
-    if state.get("negotiation_round", 0) > 0 and next_q:
+    # ── Negotiation / booking / self-help carrier ───────────────────────────────
+    # The carrier fires whenever any post-diagnostic node (negotiation, etc.)
+    # sets next_diagnostic_question to a composed message ready for delivery.
+    if state.get("diagnostic_complete") and next_q:
         return {
             "messages": [AIMessage(content=next_q)],
-            "phase": "negotiating",
+            "phase": state.get("phase", "quoting"),
             "next_diagnostic_question": None,
         }
+
+    # ── Already booked ─────────────────────────────────────────────────────
+    # After the booking confirmation has been shown, respond to any follow-up
+    # messages without re-quoting.
+    if state.get("booking_confirmed"):
+        phone = config["business"]["phone"]
+        text = (
+            "Your booking is all set — we'll see you at the scheduled time! "
+            f"If you need to make any changes, please call us at **{phone}**. "
+            "Is there anything else I can help you with?"
+        )
+        return {"messages": [AIMessage(content=text)]}
 
     # ── Self-help (offer DIY steps before quoting, when job supports it) ─────
     # Only offered once. On the next turn self_help_offered=True, we skip
@@ -178,6 +198,60 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
                 "self_help_offered": True,
             }
 
+    # ── Postcode required before quote ────────────────────────────────────────
+    # Fires only when we are about to show the quote but don't have a postcode.
+    # Self-help steps (if applicable) have already been shown by this point,
+    # so this block naturally sits at the "imminent quote" position.
+    if state.get("calculated_price") is not None and not state.get("postcode"):
+        return {
+            "messages": [AIMessage(content=(
+                "One quick thing before your quote — what's your postcode? "
+                "(e.g. SW1A, E14, NW3). We use it to check whether a ULEZ "
+                "surcharge applies to your area."
+            ))],
+            "phase": "awaiting_postcode",
+        }
+    # ── Pending diagnostic visit quote (self-help failed → postcode just captured) ─
+    # self_help_followup deferred the quote here when there was no postcode.
+    # postcode_capture → pricing → negotiation → authority_check has now run,
+    # so ulez_surcharge is correct and we can build the visit quote.
+    if state.get("pending_self_help_quote") and state.get("postcode"):
+        visit_cfg = config["self_help_diagnostic_visit"]
+        base_price = float(visit_cfg["base_price"])
+        ulez_surcharge = state.get("ulez_surcharge", 0.0)
+        visit_price = base_price + ulez_surcharge
+        ref = _quote_ref()
+        slots = state.get("availability_slots", [])
+        breakdown_lines = []
+        if ulez_surcharge > 0:
+            ulez_zone = state.get("ulez_zone", "outside")
+            zone_label = config["ulez_zones"].get(ulez_zone, {}).get("label", "")
+            breakdown_lines.append(f"  \u2022 ULEZ surcharge ({zone_label}): +\u00a3{ulez_surcharge:.2f}")
+        breakdown = ("\n\nPricing breakdown:\n" + "\n".join(breakdown_lines)) if breakdown_lines else ""
+        text = (
+            f"No problem — let's get an engineer out to you.\n\n"
+            f"**Diagnostic Visit Quote**\n\n"
+            f"A Gas Safe registered engineer will attend to fully diagnose the issue "
+            f"and advise on next steps.\n\n"
+            f"Visit fee: **\u00a3{visit_price:.2f}**{breakdown}\n\n"
+            f"\u2705 *{visit_cfg['redeemable_note']}*\n\n"
+            f"Available slots:\n{_format_slots(slots)}\n\n"
+            f"Quote reference: `{ref}`\n"
+            f"Valid for: 24 hours\n\n"
+            f"Reply with your preferred slot number to confirm."
+        )
+        return {
+            "messages": [AIMessage(content=text)],
+            "calculated_price": visit_price,
+            "final_price": visit_price,
+            "floor_price": float(visit_cfg["floor_price"]),
+            "quote_reference": ref,
+            "quote_issued": True,
+            "quote_validity_hours": 24,
+            "phase": "quoting",
+            "pending_self_help_quote": False,
+            "next_diagnostic_question": None,
+        }
     # ── Quote response ────────────────────────────────────────────────────────
     final_price = state.get("final_price") or state.get("calculated_price")
     if final_price is None:

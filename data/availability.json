@@ -1,17 +1,38 @@
 {
   "slots": {
     "same_day": [
-      { "id": "sd_001", "date": "today", "time": "14:00–16:00" },
-      { "id": "sd_002", "date": "today", "time": "16:00–18:00" }
+      { "id": "sd_001", "date": "today", "time": "10:00–12:00" },
+      { "id": "sd_002", "date": "today", "time": "14:00–16:00" },
+      { "id": "sd_003", "date": "today", "time": "16:00–18:00" }
     ],
     "evening_weekend": [
       { "id": "ew_001", "date": "today", "time": "18:00–20:00" },
-      { "id": "ew_002", "date": "today", "time": "20:00–22:00" }
+      { "id": "ew_002", "date": "today", "time": "20:00–22:00" },
+      { "id": "ew_003", "date": "day_7", "time": "09:00–11:00" },
+      { "id": "ew_004", "date": "day_7", "time": "14:00–16:00" }
     ],
     "next_day": [
       { "id": "nd_001", "date": "tomorrow", "time": "08:00–10:00" },
       { "id": "nd_002", "date": "tomorrow", "time": "10:00–12:00" },
-      { "id": "nd_003", "date": "tomorrow", "time": "14:00–16:00" }
+      { "id": "nd_003", "date": "tomorrow", "time": "14:00–16:00" },
+      { "id": "nd_004", "date": "day_2", "time": "08:00–10:00" },
+      { "id": "nd_005", "date": "day_2", "time": "10:00–12:00" },
+      { "id": "nd_006", "date": "day_2", "time": "14:00–16:00" },
+      { "id": "nd_007", "date": "day_3", "time": "08:00–10:00" },
+      { "id": "nd_008", "date": "day_3", "time": "10:00–12:00" },
+      { "id": "nd_009", "date": "day_3", "time": "14:00–16:00" }
+    ],
+    "weekday_afternoon": [
+      { "id": "wa_001", "date": "day_2", "time": "12:00–14:00" },
+      { "id": "wa_002", "date": "day_2", "time": "14:00–17:00" },
+      { "id": "wa_003", "date": "day_3", "time": "12:00–14:00" },
+      { "id": "wa_004", "date": "day_3", "time": "14:00–17:00" },
+      { "id": "wa_005", "date": "day_4", "time": "12:00–14:00" },
+      { "id": "wa_006", "date": "day_4", "time": "14:00–17:00" },
+      { "id": "wa_007", "date": "day_5", "time": "12:00–14:00" },
+      { "id": "wa_008", "date": "day_5", "time": "14:00–17:00" },
+      { "id": "wa_009", "date": "day_6", "time": "12:00–14:00" },
+      { "id": "wa_010", "date": "day_6", "time": "14:00–17:00" }
     ]
   }
 }

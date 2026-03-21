@@ -23,7 +23,7 @@ class QuoteState(TypedDict):
     intent: Optional[str]               # "quote_request" | "general_enquiry" | "complaint" | "emergency"
 
     # ── Phase (updated by nodes to drive routing) ───────────────────────────
-    phase: str                          # "intake" | "diagnosis" | "quoting" | "negotiating" | "escalated" | "ended"
+    phase: str                          # "intake" | "diagnosis" | "quoting" | "negotiating" | "escalated" | "ended" | "awaiting_postcode" | "self_help" | "booked"
 
     # ── Diagnosis ───────────────────────────────────────────────────────────
     # Max 5 questions total; terminate after 5 Q&A pairs regardless.
@@ -44,6 +44,7 @@ class QuoteState(TypedDict):
     # customer_type is SELF-DECLARED by the customer — never verified.
     # Accepted in good faith per business policy (see discounts config).
     customer_type: str                  # "new" | "returning"
+    boiler_brand: Optional[str]         # confirmed supported brand (Vaillant/Baxi/Ideal)
     postcode: Optional[str]
     ulez_zone: Optional[str]            # "inner" | "outer" | "outside"
 
@@ -77,6 +78,13 @@ class QuoteState(TypedDict):
     # True after the agent has shown self-help steps for this job.
     # On the next turn, the agent skips self-help and issues the quote.
     self_help_offered: bool
+    # True when self-help failed and we're waiting for a postcode before
+    # building the diagnostic visit quote.
+    pending_self_help_quote: bool
+
+    # ── Booking ───────────────────────────────────────────────────────────────
+    # True after the customer has confirmed an appointment slot.
+    booking_confirmed: bool
 
     # ── Error recovery ───────────────────────────────────────────────────────
     error_state: Optional[str]
@@ -103,6 +111,7 @@ def initial_state(session_id: str, customer_name: str, customer_type: str = "new
         "escalation_flag": False,
         "escalation_reason": None,
         "customer_type": customer_type,
+        "boiler_brand": None,
         "postcode": None,
         "ulez_zone": None,
         "urgency_tier": None,
@@ -122,6 +131,8 @@ def initial_state(session_id: str, customer_name: str, customer_type: str = "new
         "quote_validity_hours": 24,
         "quote_issued": False,
         "self_help_offered": False,
+        "pending_self_help_quote": False,
+        "booking_confirmed": False,
         "error_state": None,
         "retry_count": 0,
     }

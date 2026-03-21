@@ -17,6 +17,7 @@ from langchain_core.messages import SystemMessage
 from app.config import get_llm, load_business_config
 from app.models.structured_outputs import IntentClassification
 from app.state import QuoteState
+from app.utils.pii import get_safe_messages
 
 _SYSTEM = """\
 You are FixFlow — an AI quoting agent for emergency plumbing and boiler services in London.
@@ -67,21 +68,19 @@ def intent_classifier_node(state: QuoteState) -> Dict[str, Any]:
     config = load_business_config()
     brands = ", ".join(config["supported_brands"])
 
-    llm = get_llm("anthropic/claude-sonnet-4-5")
+    llm = get_llm()
     structured = llm.with_structured_output(IntentClassification)
 
     try:
         result: IntentClassification = structured.invoke([
             SystemMessage(content=_SYSTEM.format(supported_brands=brands)),
-            *state.get("messages", []),
+            *get_safe_messages(state),
         ])
 
         updates: Dict[str, Any] = {
             "intent": result.intent,
             "customer_type": result.customer_type,
         }
-        if result.postcode:
-            updates["postcode"] = result.postcode
         # Store the non-quote response so output_guard can use it
         if result.non_quote_response:
             updates["next_diagnostic_question"] = result.non_quote_response  # reuse field as carrier

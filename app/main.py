@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -27,6 +27,7 @@ load_dotenv()
 from pathlib import Path
 
 from app.graph import get_graph
+from app.config import load_business_config
 from app.state import initial_state
 
 app = FastAPI(title="FixFlow API", version="1.0.0", docs_url="/docs")
@@ -98,15 +99,20 @@ async def start_session(req: StartRequest) -> StartResponse:
 
     _quotes[session_id] = []
 
+    biz = load_business_config()
+    brands = ", ".join(biz["supported_brands"])
+
     if req.is_returning:
         welcome = (
             f"Welcome back, {req.customer_name}! Great to see you again. "
             "As a returning customer, your loyalty discount will be automatically applied to your quote. "
-            "What can we help you with today?"
+            f"We service {brands} boilers across London — what can we help you with today?"
         )
     else:
         welcome = (
             f"Hi {req.customer_name}! I'm FixFlow, your 24/7 plumbing and boiler quote assistant. "
+            f"We cover emergency plumbing repairs, boiler servicing, repairs, and replacements for "
+            f"{brands} boilers across London. "
             "Describe your problem and I'll have a quote ready for you in under 60 seconds."
         )
     return StartResponse(session_id=session_id, customer_name=req.customer_name, message=welcome)
@@ -186,3 +192,43 @@ async def get_quotes(session_id: str) -> QuotesResponse:
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok", "service": "FixFlow API"}
+
+
+@app.get("/graph", response_class=HTMLResponse, include_in_schema=False)
+async def view_graph() -> HTMLResponse:
+    """
+    Render the LangGraph conditional-edge diagram as an interactive Mermaid chart.
+    Visit http://localhost:8000/graph in a browser to see the full routing map.
+    """
+    mermaid_src = get_graph().get_graph(xray=False).draw_mermaid()
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FixFlow — Agent Graph</title>
+  <style>
+    body {{ margin: 0; background: #0f1117; display: flex; flex-direction: column;
+           align-items: center; font-family: system-ui, sans-serif; color: #e2e8f0; }}
+    h1   {{ margin: 24px 0 8px; font-size: 1.3rem; letter-spacing: .05em; }}
+    p    {{ margin: 0 0 20px; font-size: .85rem; color: #94a3b8; }}
+    #graph {{ background: #1e2130; border-radius: 12px; padding: 24px;
+              max-width: 98vw; overflow: auto; box-shadow: 0 4px 24px #0008; }}
+    .mermaid {{ min-width: 700px; }}
+  </style>
+</head>
+<body>
+  <h1>FixFlow — Agent Routing Graph</h1>
+  <p>Conditional edges show every path the agent can take through its 11 nodes.</p>
+  <div id="graph">
+    <div class="mermaid">
+{mermaid_src}
+    </div>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({{ startOnLoad: true, theme: 'dark', flowchart: {{ curve: 'basis' }} }});
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)

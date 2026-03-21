@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict
 
-from app.config import load_availability, load_business_config
+from app.config import load_availability, load_business_config, resolve_slot_dates
 from app.state import QuoteState
 
 
@@ -29,23 +29,6 @@ def _detect_urgency_tier() -> str:
         return "next_day"
 
 
-def _resolve_slot_dates(slots: list) -> list:
-    """Replace 'today'/'tomorrow' strings with human-readable dates."""
-    today = datetime.date.today()
-    tomorrow = today + datetime.timedelta(days=1)
-    # Use %d (with leading zero) for cross-platform compatibility
-    date_map = {
-        "today": today.strftime("%A %d %B").replace(" 0", " "),
-        "tomorrow": tomorrow.strftime("%A %d %B").replace(" 0", " "),
-    }
-    resolved = []
-    for slot in slots:
-        s = dict(slot)
-        s["date"] = date_map.get(s.get("date", ""), s.get("date", ""))
-        resolved.append(s)
-    return resolved
-
-
 def availability_node(state: QuoteState) -> Dict[str, Any]:
     # Pass through — slots already fetched
     if state.get("availability_slots"):
@@ -61,7 +44,7 @@ def availability_node(state: QuoteState) -> Dict[str, Any]:
     multiplier = float(tier_config.get("multiplier", 1.0))
 
     raw_slots = availability_data["slots"].get(urgency_tier, [])[:3]
-    slots = _resolve_slot_dates(raw_slots)
+    slots = resolve_slot_dates(raw_slots)
 
     return {
         "urgency_tier": urgency_tier,
