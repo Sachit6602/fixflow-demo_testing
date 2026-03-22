@@ -1,6 +1,5 @@
 import requests
 import uuid
-import time
 
 def process_payment(amount, from_uid, provider_name):
     tx_ref = "0x" + uuid.uuid4().hex[:16]
@@ -10,11 +9,9 @@ def process_payment(amount, from_uid, provider_name):
     print(f"From:      {from_uid}")
     print(f"To:        {provider_name}")
     print(f"Tx ref:    {tx_ref}")
-
-    time.sleep(1)
     print(f"Status:    Submitting to Endless Chain...")
 
-    # Real outbound API call — visible in terminal, returns a real response
+    # Outbound API call — visible in terminal, returns a real response
     response = requests.post("https://httpbin.org/post", json={
         "tx_ref": tx_ref,
         "amount": amount,
@@ -23,12 +20,9 @@ def process_payment(amount, from_uid, provider_name):
         "to": provider_name,
         "chain": "endless",
         "type": "payment"
-    })
+    }, timeout=5)
 
-    time.sleep(1)
     print(f"Status:    Submitted ✓ (HTTP {response.status_code})")
-
-    time.sleep(1)
     print(f"Status:    Confirmed ✓")
     print(f"--- PAYMENT COMPLETE ---\n")
 

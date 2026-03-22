@@ -27,7 +27,8 @@ You are FixFlow's post-quote conversation handler for a London plumbing and boil
 
 Current quote:
   Job:               {job_type}
-  Calculated price:  £{calculated_price:.2f}
+  Original price:    £{calculated_price:.2f}
+  Current price:     £{final_price:.2f}  ← this is what the customer sees now
   Floor price:       £{floor_price:.2f}  ← NEVER go below this
   Customer type:     {customer_type} (verified via account history when available, otherwise self-declared)
   Max discount:      {max_discount}%
@@ -81,7 +82,6 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
     negotiation_round = state.get("negotiation_round", 0)
     calculated_price = state.get("calculated_price", 0.0)
     floor_price = state.get("floor_price", calculated_price * 0.8)
-    existing_discount = state.get("discount_pct", 0.0)
 
     max_discount = (
         disc_cfg["returning_customer_max_pct"]
@@ -94,10 +94,12 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
     structured = llm.with_structured_output(NegotiationResult)
 
     try:
+        final_price = state.get("final_price") or calculated_price
         result: NegotiationResult = structured.invoke([
             SystemMessage(content=_SYSTEM.format(
                 job_type=(state.get("job_type") or "").replace("_", " ").title(),
                 calculated_price=calculated_price,
+                final_price=final_price,
                 floor_price=floor_price,
                 customer_type=customer_type,
                 max_discount=max_discount,
@@ -113,11 +115,24 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
         if result.booking_intent:
             slots = state.get("availability_slots", [])
             slot_num = result.slot_selected
+
+            # If no slot specified, ask which one they want
+            if not slot_num and slots:
+                slot_lines = "\n".join(
+                    f"  {i}. {s['date']}  {s['time']}"
+                    for i, s in enumerate(slots, 1)
+                )
+                return {
+                    "next_diagnostic_question": (
+                        f"Great — which slot works best for you?\n\n"
+                        f"{slot_lines}\n\n"
+                        f"Reply with the slot number (1, 2, or 3)."
+                    ),
+                }
+
             if slot_num and 1 <= slot_num <= len(slots):
                 chosen = slots[slot_num - 1]
                 slot_text = f"{chosen['date']} at {chosen['time']}"
-            elif slots:
-                slot_text = f"{slots[0]['date']} at {slots[0]['time']}"
             else:
                 slot_text = "your preferred time"
 
@@ -125,7 +140,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             final = state.get("final_price") or state.get("calculated_price", 0.0)
             job_label = (state.get("job_type") or "").replace("_", " ").title()
             confirmation = (
-                f"Your appointment is confirmed! 🎉\n\n"
+                f"Your appointment is confirmed!\n\n"
                 f"**Booking details:**\n"
                 f"  \u2022 Job: {job_label}\n"
                 f"  \u2022 Date/Time: {slot_text}\n"
@@ -175,9 +190,17 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             elif pref == "tomorrow":
                 tier = "next_day"
             else:
-                # No preference — use whatever tier is already in state,
-                # defaulting to next_day so we always show something useful.
                 tier = state.get("urgency_tier") or "next_day"
+
+            # Recalculate price for the new tier
+            tier_cfg = config["urgency_tiers"].get(tier, {})
+            new_multiplier = float(tier_cfg.get("multiplier", 1.0))
+            base_price = float(state.get("base_price") or 0.0)
+            ulez_surcharge = state.get("ulez_surcharge", 0.0)
+            parts_estimate = state.get("parts_estimate", 0.0)
+            new_price = round((base_price * new_multiplier) + ulez_surcharge + parts_estimate, 2)
+            floor = float(state.get("floor_price") or 0.0)
+            new_price = max(new_price, floor)
 
             # Resolve date placeholders to human-readable dates.
             raw_slots = availability_data["slots"].get(tier, [])[:3]
@@ -188,19 +211,21 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
                 for i, s in enumerate(slots, 1)
             ) if slots else "  No slots available for that date — please call us."
             job_label = (state.get("job_type") or "").replace("_", " ").title()
-            final = state.get("final_price") or state.get("calculated_price", 0.0)
             ref = state.get("quote_reference", "N/A")
             carrier = (
                 f"Of course — here are the available slots for your "
                 f"**{job_label}** visit:\n\n"
                 f"{slot_lines}\n\n"
-                f"Price: **\u00a3{final:.2f}** | Reference: `{ref}`\n\n"
+                f"Price: **\u00a3{new_price:.2f}** | Reference: `{ref}`\n\n"
                 f"Reply with the slot number you'd prefer."
             )
             return {
                 "next_diagnostic_question": carrier,
                 "availability_slots": slots,
                 "urgency_tier": tier,
+                "urgency_multiplier": new_multiplier,
+                "calculated_price": new_price,
+                "final_price": new_price,
                 "booking_confirmed": False,
                 "phase": "quoting",
             }
@@ -299,6 +324,10 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
 
     except Exception as e:
         return {
+            "next_diagnostic_question": (
+                "Sorry, I had a hiccup processing that. "
+                "Could you try again or let me know how I can help?"
+            ),
             "error_state": f"negotiation: {e}",
             "retry_count": state.get("retry_count", 0) + 1,
         }

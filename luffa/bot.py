@@ -158,9 +158,6 @@ def handle_text_message(uid: str, text: str):
         phase = data.get("phase")
         quote_ref = data.get("quote_reference")
 
-        if quote_ref:
-            reply += f"\n\nQuote Ref: {quote_ref}"
-
         send_message(uid, reply)
         print(f"[Debug] {uid}: phase={phase}")
 
@@ -195,27 +192,6 @@ def handle_slot_selection(uid: str, text: str):
     stripped = text.strip()
     quote_info = pending_slot_selection[uid]
 
-    # If the user sends something clearly not a slot number, exit slot selection
-    # and forward to the agent as a normal message
-    if stripped not in ("1", "2", "3") and len(stripped) > 1:
-        del pending_slot_selection[uid]
-        print(f"[Booking] {uid} exited slot selection with: {repr(text)}")
-        # Re-process as a normal message
-        session_id = ensure_session(uid)
-        resp = requests.post(
-            f"{FIXFLOW_BASE}/api/chat",
-            json={"session_id": session_id, "message": text},
-        )
-        if resp.ok:
-            data = resp.json()
-            reply = data["response"]
-            if data.get("phase") == "ended":
-                clear_session(uid)
-            send_message(uid, reply)
-        else:
-            send_message(uid, "Sorry, something went wrong. Please try again.")
-        return
-
     if stripped in ("1", "2", "3"):
         slot_label = {
             "1": "Slot 1",
@@ -236,7 +212,10 @@ def handle_slot_selection(uid: str, text: str):
         send_message(uid, payment_msg["text"])
         print(f"[Booking] {uid} selected {slot_label}, payment prompt sent")
     else:
-        send_message(uid, "Please reply with your preferred slot number (1, 2, or 3).")
+        # Anything that's not a slot number — exit slot selection and forward to agent
+        del pending_slot_selection[uid]
+        print(f"[Booking] {uid} exited slot selection with: {repr(text)}")
+        handle_text_message(uid, text)
 
 
 def handle_payment_response(uid: str, text: str):
@@ -244,29 +223,25 @@ def handle_payment_response(uid: str, text: str):
     payment = pending_payments[uid]
     stripped = text.strip()
 
-    # If the user sends something clearly not a payment response, exit payment flow
-    if stripped not in ("1", "2") and len(stripped) > 1:
-        del pending_payments[uid]
-        clear_session(uid)
-        print(f"[Payment] {uid} exited payment flow with: {repr(text)}")
-        # Start fresh — forward as new conversation
-        handle_text_message(uid, text)
-        return
-
     if stripped == "1":
         response = handle_payment_confirmation(uid, BUSINESS_NAME, payment["final_price"])
         send_message(uid, response)
-        # Clear payment state and session so next message starts fresh
+        send_message(uid, "Is there anything else I can help you with?")
         del pending_payments[uid]
-        active_sessions.pop(uid, None)
         print(f"[Payment] Confirmed for {uid}: £{payment['final_price']:.2f}")
     elif stripped == "2":
-        send_message(uid, "Booking cancelled. Your quote is still valid for 24 hours if you change your mind.")
+        send_message(uid, (
+            "Payment cancelled — your quote is still valid for 24 hours "
+            "if you change your mind.\n\n"
+            "Is there anything else I can help you with?"
+        ))
         del pending_payments[uid]
         print(f"[Payment] Cancelled by {uid}")
     else:
-        send_message(uid, "Please reply with:\n1 - Confirm & Pay\n2 - Cancel")
-        print(f"[Payment] Invalid response from {uid}: {repr(text)}")
+        # Not a payment response — exit payment flow and forward to agent
+        del pending_payments[uid]
+        print(f"[Payment] {uid} exited payment flow with: {repr(text)}")
+        handle_text_message(uid, text)
 
 
 def process(data):
