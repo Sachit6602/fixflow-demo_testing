@@ -1,12 +1,12 @@
 """
 Availability Node — runs once (passes through if slots already fetched).
 
-Detects urgency tier from the current time/day, then generates availability
-slots based on engineer schedules and estimated travel time to the customer's
-postcode (via postcodes.io).
+Three-tier slot resolution:
+  1. Live Google Calendar via Civic MCP (gcal_find_my_free_time)
+  2. Dynamic geocoded slots from engineers.json + postcodes.io
+  3. Static slots from availability.json
 
-Falls back to static slots from availability.json if the customer postcode
-is missing or geocoding fails.
+Falls through each tier on failure, so the system is never without slots.
 """
 from __future__ import annotations
 
@@ -162,14 +162,27 @@ def availability_node(state: QuoteState) -> Dict[str, Any]:
 
     slots = []
 
-    if customer_postcode:
+    # Priority 1: Live Google Calendar via Civic MCP
+    try:
+        from app.calendar import find_free_slots as calendar_find_free_slots
+        slots = calendar_find_free_slots(urgency_tier)
+        if slots:
+            print(f"[Availability] Using live calendar slots ({len(slots)} found)")
+    except Exception as e:
+        print(f"[Availability] Calendar slots failed: {e}")
+        slots = []
+
+    # Priority 2: Dynamic geocoded slots from engineer schedules
+    if not slots and customer_postcode:
         try:
             slots = _build_dynamic_slots(customer_postcode)
+            if slots:
+                print(f"[Availability] Using dynamic geocoded slots ({len(slots)} found)")
         except Exception as e:
-            print(f"[Availability] Dynamic slots failed, falling back to static: {e}")
+            print(f"[Availability] Dynamic slots failed: {e}")
             slots = []
 
-    # Fallback to static slots
+    # Priority 3: Static slots from availability.json
     if not slots:
         availability_data = load_availability()
         raw_slots = availability_data["slots"].get(urgency_tier, [])[:3]

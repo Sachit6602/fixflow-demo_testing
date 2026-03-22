@@ -7,6 +7,7 @@
     {
       "engineer_id": "eng_001",
       "name": "Dave Mitchell",
+      "calendar_id": "kennethhagin1999@gmail.com",
       "schedule": [
         { "date": "2026-03-22", "available_from": "08:00", "location": "SE1 7PB" },
         { "date": "2026-03-22", "available_from": "14:00", "location": "SW4 7AA" },
@@ -19,6 +20,7 @@
     {
       "engineer_id": "eng_002",
       "name": "Sarah Khan",
+      "calendar_id": "kennethhagin1999@gmail.com",
       "schedule": [
         { "date": "2026-03-22", "available_from": "11:00", "location": "N1 9GU" },
         { "date": "2026-03-22", "available_from": "16:00", "location": "N7 8JG" },
@@ -31,6 +33,7 @@
     {
       "engineer_id": "eng_003",
       "name": "Mike O'Brien",
+      "calendar_id": "kennethhagin1999@gmail.com",
       "schedule": [
         { "date": "2026-03-22", "available_from": "09:00", "location": "W12 7SL" },
         { "date": "2026-03-23", "available_from": "11:00", "location": "W6 9DT" },
@@ -43,6 +46,7 @@
     {
       "engineer_id": "eng_004",
       "name": "James Peters",
+      "calendar_id": "kennethhagin1999@gmail.com",
       "schedule": [
         { "date": "2026-03-22", "available_from": "10:00", "location": "E14 5AB" },
         { "date": "2026-03-22", "available_from": "18:00", "location": "E3 4TA" },

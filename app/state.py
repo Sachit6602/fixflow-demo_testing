@@ -87,6 +87,7 @@ class QuoteState(TypedDict):
     # ── Booking ───────────────────────────────────────────────────────────────
     # True after the customer has confirmed an appointment slot.
     booking_confirmed: bool
+    booked_calendar_event_id: Optional[str]  # Google Calendar event ID (via Civic MCP)
 
     # ── Error recovery ───────────────────────────────────────────────────────
     error_state: Optional[str]
@@ -137,6 +138,7 @@ def initial_state(session_id: str, customer_name: str, customer_type: str = "new
         "self_help_offered": False,
         "pending_self_help_quote": False,
         "booking_confirmed": False,
+        "booked_calendar_event_id": None,
         "error_state": None,
         "retry_count": 0,
     }

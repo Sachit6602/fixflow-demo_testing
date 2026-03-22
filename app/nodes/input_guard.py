@@ -6,13 +6,15 @@ Two-layer gas-smell detection:
   Layer 2: LLM classifier fallback for paraphrased descriptions
             (only invoked when ambiguous trigger words are present)
 
-Two-layer prompt injection detection:
-  Layer 1: Regex patterns for known injection templates (synchronous)
-  Layer 2: LLM civic guardrail (claude-haiku) for subtle/indirect attacks —
-            social engineering, persona hijacking, hypothetical jailbreaks,
-            developer-mode requests, and system prompt extraction attempts.
-            Only invoked when soft signals (e.g. "hypothetically", "reveal",
-            "your rules") are detected in the message.
+Three-layer prompt injection detection (Option 1 — Civic primary, regex fallback):
+  Layer 0 (PRIMARY): Civic Bodyguard — HTTP call to Civic's prompt injection
+            detection API. Returns a threat score (0–1). Covers OWASP LLM01:
+            encoded payloads, obfuscated injections, social engineering,
+            jailbreaks, and continuously updated patterns.
+  Layer 1 (FALLBACK): Regex patterns for known injection templates (synchronous).
+            Only runs if Civic is unreachable or unconfigured.
+  Layer 2 (FALLBACK): LLM civic guardrail (claude-haiku) for subtle/indirect
+            attacks. Only runs if Civic is unreachable AND soft signals detected.
 
 If safety is triggered, subsequent nodes see safety_triggered=True and route
 directly to output_guard which returns the hard stop message.
@@ -24,6 +26,7 @@ from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.civic_guard import check_injection as civic_check_injection
 from app.config import get_llm, load_business_config
 from app.models.structured_outputs import GasSmellClassification, PromptInjectionCheck
 from app.state import QuoteState
@@ -217,23 +220,34 @@ def input_guard_node(state: QuoteState) -> Dict[str, Any]:
     if _keyword_gas_match(latest):
         return {"safety_triggered": True, "safety_type": "gas_smell"}
 
-    # ── Layer 1: regex injection check ────────────────────────────────────────
-    if _keyword_injection_match(latest):
-        return {"safety_triggered": True, "safety_type": "prompt_injection"}
+    # ── Layer 0 (PRIMARY): Civic Bodyguard injection check ─────────────────
+    # Single HTTP call to Civic's continuously-updated injection detector.
+    # Covers OWASP LLM01: encoded payloads, jailbreaks, social engineering.
+    # Returns None if unreachable/unconfigured → triggers fallback layers.
+    civic_result = civic_check_injection(latest)
+    if civic_result is not None:
+        # Civic responded — trust its verdict
+        if civic_result["is_injection"]:
+            return {"safety_triggered": True, "safety_type": "prompt_injection"}
+        # Civic says clean — skip regex/LLM injection checks, proceed to gas
+    else:
+        # ── FALLBACK: Civic unreachable — use existing regex + LLM layers ────
+        # Layer 1: regex injection check
+        if _keyword_injection_match(latest):
+            return {"safety_triggered": True, "safety_type": "prompt_injection"}
 
-    # ── Layer 2: LLM gas check for paraphrased descriptions ──────────────────
-    # Only invoked when message contains smell/odour/dizzy/headache-type words
-    # to avoid paying LLM latency on every unrelated message.
+        # Layer 2: LLM civic guardrail for subtle injection
+        # Only invoked when soft signals suggest social engineering or indirect
+        # jailbreak (e.g. "hypothetically", "reveal your prompt").
+        if _has_soft_injection_signal(latest):
+            if _llm_injection_check(latest):
+                return {"safety_triggered": True, "safety_type": "prompt_injection"}
+
+    # ── Gas-smell checks (always run, independent of injection checks) ───────
+    # Layer 2: LLM gas check for paraphrased descriptions
+    # Only invoked when message contains smell/odour/dizzy/headache-type words.
     if _has_ambiguous_signal(latest):
         if _llm_gas_check(latest):
             return {"safety_triggered": True, "safety_type": "gas_smell"}
-
-    # ── Layer 2: LLM civic guardrail for subtle injection ────────────────────
-    # Only invoked when soft signals suggest social engineering or indirect
-    # jailbreak (e.g. "hypothetically", "reveal your prompt", "as a researcher").
-    # The fast Haiku model is used to keep latency low.
-    if _has_soft_injection_signal(latest):
-        if _llm_injection_check(latest):
-            return {"safety_triggered": True, "safety_type": "prompt_injection"}
 
     return {"safety_triggered": False, "safety_type": None}

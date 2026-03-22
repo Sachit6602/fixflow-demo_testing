@@ -139,6 +139,33 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             ref = state.get("quote_reference", "N/A")
             final = state.get("final_price") or state.get("calculated_price", 0.0)
             job_label = (state.get("job_type") or "").replace("_", " ").title()
+
+            # ── Create Google Calendar event via Civic MCP ────────────────
+            calendar_event_id = None
+            if slot_num and 1 <= slot_num <= len(slots):
+                chosen = slots[slot_num - 1]
+                try:
+                    from app.calendar import create_booking_event
+                    start_rfc = chosen.get("_start_rfc3339")
+                    end_rfc = chosen.get("_end_rfc3339")
+                    if start_rfc and end_rfc:
+                        calendar_event_id = create_booking_event(
+                            summary=f"FixFlow — {job_label} ({ref})",
+                            start_rfc3339=start_rfc,
+                            end_rfc3339=end_rfc,
+                            description=(
+                                f"Job: {job_label}\n"
+                                f"Customer: {state.get('customer_name', 'N/A')}\n"
+                                f"Postcode: {state.get('postcode', 'N/A')}\n"
+                                f"Ref: {ref}\n"
+                                f"Price: £{final:.2f}"
+                            ),
+                            location=state.get("postcode") or "",
+                        )
+                except Exception as e:
+                    print(f"[Negotiation] Calendar event creation failed: {e}")
+            # ──────────────────────────────────────────────────────────────
+
             confirmation = (
                 f"Your appointment is confirmed!\n\n"
                 f"**Booking details:**\n"
@@ -152,6 +179,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             return {
                 "next_diagnostic_question": confirmation,
                 "booking_confirmed": True,
+                "booked_calendar_event_id": calendar_event_id,
                 "phase": "booked",
             }
 
