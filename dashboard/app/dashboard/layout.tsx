@@ -14,6 +14,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Toaster } from "sonner"
+import { DataSourceProvider, useDataSource } from "@/lib/data-context"
+import { Database, TestTube2 } from "lucide-react"
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -22,12 +24,37 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
+function DataSourceToggle({ collapsed }: { collapsed: boolean }) {
+  const { dataSource, setDataSource } = useDataSource()
+  const isLive = dataSource === "live"
+
+  return (
+    <div className={cn("p-3 border-t border-border", collapsed && "flex justify-center")}>
+      <button
+        onClick={() => setDataSource(isLive ? "sample" : "live")}
+        className={cn(
+          "flex items-center gap-3 w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+          collapsed && "justify-center px-0 w-auto",
+          isLive
+            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+        )}
+        title={collapsed ? (isLive ? "Live Data" : "Demo Data") : undefined}
+      >
+        {isLive ? <Database className="w-4 h-4 shrink-0" /> : <TestTube2 className="w-4 h-4 shrink-0" />}
+        {!collapsed && <span>{isLive ? "Live Data" : "Demo Data"}</span>}
+      </button>
+    </div>
+  )
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <DataSourceProvider>
+      <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <aside
         className={cn(
@@ -72,6 +99,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
+        {/* Data source toggle */}
+        <DataSourceToggle collapsed={collapsed} />
+
         {/* Collapse toggle */}
         <div className="p-3 border-t border-border">
           <button
@@ -94,5 +124,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <Toaster richColors position="top-right" />
     </div>
+    </DataSourceProvider>
   )
 }

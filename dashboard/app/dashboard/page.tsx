@@ -1,15 +1,17 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { KpiCard } from "@/components/dashboard/kpi-card"
+import { useDataSource } from "@/lib/data-context"
 import {
-  kpiOverview,
-  sparklineData,
-  conversionFunnel,
-  revenueTrend,
-  revenueByJobType,
-  recentActivity,
-} from "@/lib/sample-data"
+  getKpiOverview,
+  getSparklineData,
+  getConversionFunnel,
+  getRevenueTrend,
+  getRevenueByJobType,
+  getRecentActivity,
+} from "@/lib/data-provider"
 import {
   LineChart,
   Line,
@@ -41,7 +43,50 @@ const CHART_COLORS = [
 ]
 
 export default function OverviewPage() {
-  const maxFunnelValue = conversionFunnel[0].value
+  const { isLive } = useDataSource()
+  const [kpi, setKpi] = useState<any>(null)
+  const [sparkline, setSparkline] = useState<any>(null)
+  const [funnel, setFunnel] = useState<any[]>([])
+  const [trend, setTrend] = useState<any[]>([])
+  const [jobRevenue, setJobRevenue] = useState<any[]>([])
+  const [activity, setActivity] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    Promise.all([
+      getKpiOverview(isLive),
+      getSparklineData(isLive),
+      getConversionFunnel(isLive),
+      getRevenueTrend(isLive),
+      getRevenueByJobType(isLive),
+      getRecentActivity(isLive),
+    ]).then(([k, s, f, t, j, a]) => {
+      if (cancelled) return
+      setKpi(k)
+      setSparkline(s)
+      setFunnel(f)
+      setTrend(t)
+      setJobRevenue(j)
+      setActivity(a)
+      setLoading(false)
+    })
+
+    return () => { cancelled = true }
+  }, [isLive])
+
+  if (loading || !kpi) {
+    return (
+      <div className="p-6 max-w-[1400px] mx-auto">
+        <PageHeader title="Overview" description="Last 30 days performance summary" />
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  const maxFunnelValue = funnel.length > 0 ? funnel[0].value : 1
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -54,28 +99,28 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard
           title="Chats Initiated"
-          value={kpiOverview.chatsInitiated.value}
-          change={kpiOverview.chatsInitiated.change}
-          sparkline={sparklineData.chatsInitiated}
+          value={kpi.chatsInitiated.value}
+          change={kpi.chatsInitiated.change}
+          sparkline={sparkline?.chatsInitiated}
         />
         <KpiCard
           title="Quotes Sent"
-          value={kpiOverview.quotesSent.value}
-          change={kpiOverview.quotesSent.change}
-          sparkline={sparklineData.quotesSent}
+          value={kpi.quotesSent.value}
+          change={kpi.quotesSent.change}
+          sparkline={sparkline?.quotesSent}
         />
         <KpiCard
           title="Quotes Accepted"
-          value={kpiOverview.quotesAccepted.value}
-          change={kpiOverview.quotesAccepted.change}
-          sparkline={sparklineData.quotesAccepted}
+          value={kpi.quotesAccepted.value}
+          change={kpi.quotesAccepted.change}
+          sparkline={sparkline?.quotesAccepted}
         />
         <KpiCard
           title="Revenue"
-          value={kpiOverview.revenue.value.toLocaleString()}
-          change={kpiOverview.revenue.change}
+          value={kpi.revenue.value.toLocaleString()}
+          change={kpi.revenue.change}
           prefix="£"
-          sparkline={sparklineData.revenue}
+          sparkline={sparkline?.revenue}
         />
       </div>
 
@@ -85,7 +130,7 @@ export default function OverviewPage() {
         <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-foreground mb-4">Conversion Funnel</h2>
           <div className="flex flex-col gap-3">
-            {conversionFunnel.map((stage, i) => (
+            {funnel.map((stage) => (
               <div key={stage.stage}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm text-muted-foreground">{stage.stage}</span>
@@ -113,7 +158,7 @@ export default function OverviewPage() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={revenueByJobType}
+                data={jobRevenue}
                 cx="40%"
                 cy="50%"
                 innerRadius={55}
@@ -121,7 +166,7 @@ export default function OverviewPage() {
                 dataKey="value"
                 paddingAngle={3}
               >
-                {revenueByJobType.map((_, index) => (
+                {jobRevenue.map((_, index) => (
                   <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
               </Pie>
@@ -151,7 +196,7 @@ export default function OverviewPage() {
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm mb-4">
         <h2 className="text-sm font-semibold text-foreground mb-4">Daily Revenue — Last 30 Days</h2>
         <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={revenueTrend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+          <LineChart data={trend} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="date"
@@ -202,7 +247,7 @@ export default function OverviewPage() {
               </tr>
             </thead>
             <tbody>
-              {recentActivity.map((item) => (
+              {activity.map((item) => (
                 <tr key={item.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
                   <td className="py-3 pr-4 text-muted-foreground tabular-nums text-xs">{item.time}</td>
                   <td className="py-3 pr-4 text-foreground font-medium">{item.customer}</td>
