@@ -20,6 +20,10 @@ def pricing_node(state: QuoteState) -> Dict[str, Any]:
     if state.get("calculated_price") is not None:
         return {}
 
+    # Pass through — diagnostic visit pricing is handled by output_guard
+    if state.get("pending_self_help_quote"):
+        return {}
+
     config = load_business_config()
     job_type = state.get("job_type")
     confidence = state.get("confidence_level", "medium")

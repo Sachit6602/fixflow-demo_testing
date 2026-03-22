@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.config import get_llm, load_business_config
 from app.models.structured_outputs import JobClassification
 from app.state import QuoteState
+from app.utils.pii import get_safe_messages
 
 _SYSTEM = """\
 You are FixFlow's job classifier for a London plumbing and boiler service.
@@ -47,20 +48,26 @@ def job_classifier_node(state: QuoteState) -> Dict[str, Any]:
     if state.get("job_type") is not None:
         return {}
 
+    # Pass through — diagnostic already determined out-of-scope (e.g. unsupported brand).
+    # Explicitly propagate in_scope=False so the router sends to output_guard
+    # rather than relying on the diagnostic node's state alone.
+    if not state.get("in_scope", True):
+        return {"in_scope": False}
+
     config = load_business_config()
     brands = ", ".join(config["supported_brands"])
     job_type_keys = ", ".join(config["supported_job_types"].keys())
 
     symptoms = state.get("symptoms", [])
 
-    llm = get_llm("anthropic/claude-sonnet-4-5")
+    llm = get_llm()
     structured = llm.with_structured_output(JobClassification)
 
     try:
         result: JobClassification = structured.invoke([
             SystemMessage(content=_SYSTEM.format(brands=brands, job_type_keys=job_type_keys)),
             HumanMessage(content=f"Symptoms extracted: {', '.join(symptoms) or 'none provided'}"),
-            *state.get("messages", []),
+            *get_safe_messages(state),
         ])
 
         updates: Dict[str, Any] = {

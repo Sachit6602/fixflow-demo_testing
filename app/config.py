@@ -1,16 +1,25 @@
 import json
 import os
+import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from langchain_openai import ChatOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# Single model used across every node. Override via LLM_MODEL env var.
+_DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 
-def get_llm(model: str, max_tokens: int = 512, temperature: float = 0) -> ChatOpenAI:
-    """Return a ChatOpenAI instance routed through OpenRouter."""
+
+def get_llm(max_tokens: int = 512, temperature: float = 0) -> ChatOpenAI:
+    """Return a ChatOpenAI instance routed through OpenRouter.
+
+    The model is read from the LLM_MODEL environment variable so it can be
+    changed for the whole application from one place without touching any node.
+    """
+    model = os.environ.get("LLM_MODEL", _DEFAULT_MODEL)
     return ChatOpenAI(
         model=model,
         openai_api_key=os.environ.get("OPENROUTER_API_KEY", ""),
@@ -31,6 +40,12 @@ def load_business_config() -> Dict[str, Any]:
 @lru_cache(maxsize=1)
 def load_availability() -> Dict[str, Any]:
     with open(DATA_DIR / "availability.json", "r") as f:
+        return json.load(f)
+
+
+@lru_cache(maxsize=1)
+def load_engineers() -> Dict[str, Any]:
+    with open(DATA_DIR / "engineers.json", "r") as f:
         return json.load(f)
 
 
@@ -69,3 +84,33 @@ def get_ulez_zone(postcode: str) -> str:
 def get_ulez_surcharge(zone: str) -> float:
     config = load_business_config()
     return float(config["ulez_zones"].get(zone, {}).get("surcharge", 0))
+
+
+def resolve_slot_dates(slots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Resolve 'today', 'tomorrow', and 'day_N' date placeholders to
+    human-readable day + date strings (e.g. 'Monday 23 March').
+
+    Used by both the availability node and the negotiation node so the logic
+    stays in one place.
+    """
+    today = datetime.date.today()
+
+    def _fmt(d: datetime.date) -> str:
+        return d.strftime("%A %d %B").replace(" 0", " ")
+
+    resolved = []
+    for slot in slots:
+        s = dict(slot)
+        raw = s.get("date", "")
+        if raw == "today":
+            s["date"] = _fmt(today)
+        elif raw == "tomorrow":
+            s["date"] = _fmt(today + datetime.timedelta(days=1))
+        elif raw.startswith("day_"):
+            try:
+                n = int(raw.split("_", 1)[1])
+                s["date"] = _fmt(today + datetime.timedelta(days=n))
+            except (ValueError, IndexError):
+                pass  # leave the raw string as-is
+        resolved.append(s)
+    return resolved

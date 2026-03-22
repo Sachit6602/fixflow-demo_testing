@@ -2,7 +2,7 @@
 Intent Classifier — runs once per session (passes through if intent already set).
 
 Classifies the customer's primary intent and extracts initial context:
-  - customer_type (self-declared, never verified)
+  - customer_type (auto-detected via Luffa uid when available, self-declared as fallback)
   - postcode (if mentioned)
 
 For non-quote intents, the LLM also drafts the customer-facing response,
@@ -17,12 +17,12 @@ from langchain_core.messages import SystemMessage
 from app.config import get_llm, load_business_config
 from app.models.structured_outputs import IntentClassification
 from app.state import QuoteState
+from app.utils.pii import get_safe_messages
 
 _SYSTEM = """\
 You are FixFlow — an AI quoting agent for emergency plumbing and boiler services in London.
 
 Services offered:
-- Emergency plumbing repairs (leaks, burst pipes)
 - Boiler servicing, repairs, and replacements
 
 Supported boiler brands: {supported_brands}
@@ -34,8 +34,13 @@ Your task:
 3. Extract their postcode if explicitly mentioned.
 4. ONLY for non-quote intents, write a brief response in non_quote_response.
 
-CRITICAL CLASSIFICATION RULE:
-Default to 'quote_request' for ANY of the following — even if vague:
+CLASSIFICATION RULES:
+
+Use 'greeting' for:
+  - Pure greetings with no service request ("hi", "hello", "hey", "good morning", "howdy")
+  - Conversational openers that don't mention a problem yet
+
+Use 'quote_request' for ANY of the following — even if vague:
   - Describing a problem ("my boiler isn't working", "no hot water", "pipe is leaking")
   - Asking about price or cost
   - Describing symptoms of any plumbing or boiler issue
@@ -47,8 +52,10 @@ Only use other intents when unambiguous:
   - general_enquiry: clearly asking a factual question ("what areas do you cover?", "what brands do you service?")
   - complaint: explicitly unhappy about a PAST job
   - emergency: life-threatening situation NOT related to gas (gas is handled separately)
+  - farewell: the customer is saying goodbye or declining further help ("no thanks", "that's all", "bye", "nothing else", "I'm good", "nope")
 
-When in doubt, choose quote_request.
+When in doubt between greeting and quote_request, choose greeting.
+When in doubt between quote_request and general_enquiry, choose quote_request.
 """
 
 
@@ -67,21 +74,25 @@ def intent_classifier_node(state: QuoteState) -> Dict[str, Any]:
     config = load_business_config()
     brands = ", ".join(config["supported_brands"])
 
-    llm = get_llm("anthropic/claude-sonnet-4-5")
+    llm = get_llm()
     structured = llm.with_structured_output(IntentClassification)
 
     try:
         result: IntentClassification = structured.invoke([
             SystemMessage(content=_SYSTEM.format(supported_brands=brands)),
-            *state.get("messages", []),
+            *get_safe_messages(state),
         ])
+
+        # Only upgrade, never downgrade — uid-verified returning status takes priority
+        if result.customer_type == "returning" or state.get("customer_type") == "returning":
+            derived_type = "returning"
+        else:
+            derived_type = result.customer_type
 
         updates: Dict[str, Any] = {
             "intent": result.intent,
-            "customer_type": result.customer_type,
+            "customer_type": derived_type,
         }
-        if result.postcode:
-            updates["postcode"] = result.postcode
         # Store the non-quote response so output_guard can use it
         if result.non_quote_response:
             updates["next_diagnostic_question"] = result.non_quote_response  # reuse field as carrier

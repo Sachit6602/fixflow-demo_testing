@@ -27,7 +27,7 @@ def authority_check_node(state: QuoteState) -> Dict[str, Any]:
     thresholds = config["authority_thresholds"]
 
     # Use final_price (post-negotiation) if available, else calculated_price
-    price = state.get("final_price") or state.get("calculated_price", 0.0)
+    price = state.get("final_price") or state.get("calculated_price") or 0.0
 
     if price < thresholds["auto_confirm_below"]:
         level = "auto_confirm"

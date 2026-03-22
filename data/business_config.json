@@ -6,7 +6,7 @@
     "email": "hello@fixflow.co.uk"
   },
 
-  "supported_brands": ["Vaillant", "Baxi", "Ideal"],
+  "supported_brands": ["Vaillant", "Baxi", "Ideal","LG"],
 
   "supported_job_types": {
     "boiler_repressurise": {
@@ -19,15 +19,15 @@
       "description": "Boiler pressure restoration",
       "self_help": {
         "title": "You may be able to fix this yourself in 5 minutes",
-        "intro": "Low boiler pressure (below 1 bar) is one of the most common boiler issues — and it's often something you can fix yourself without a callout.",
+        "intro": "Low boiler pressure (below 1 bar) is one of the most common boiler issues - and it's often something you can fix yourself without a callout.",
         "steps": [
           "Turn off the boiler and let it cool for 10 minutes.",
-          "Locate the filling loop — it's usually a silver flexible hose with one or two valves under or beside the boiler.",
+          "Locate the filling loop - it's usually a silver flexible hose with one or two valves under or beside the boiler.",
           "Slowly open the valves (turn them so the slot aligns with the pipe). You'll hear water filling.",
-          "Watch the pressure gauge. When it reaches 1.0–1.5 bar, close the valves.",
+          "Watch the pressure gauge. When it reaches 1.0 to 1.5 bar, close the valves.",
           "Turn your boiler back on. If the E118 error clears, you're done."
         ],
-        "warning": "If pressure keeps dropping within 24 hours, there may be a leak in the system — that needs a professional.",
+        "warning": "If pressure keeps dropping within 24 hours, there may be a leak in the system - that needs a professional.",
         "followup": "Give it a try and let me know how it goes. If it doesn't fix it, or you'd rather have a Gas Safe engineer do it, I can get you a quote right now."
       }
     },
@@ -132,6 +132,11 @@
       "multiplier": 1.0,
       "label": "Next-day appointment",
       "description": "Standard rate for next available weekday slot"
+    },
+    "weekday_afternoon": {
+      "multiplier": 0.85,
+      "label": "Weekday afternoon (flexible)",
+      "description": "Mon–Fri 12pm–5pm — our most affordable rate for non-urgent jobs"
     }
   },
 
@@ -145,7 +150,7 @@
   "discounts": {
     "new_customer_max_pct": 10,
     "returning_customer_max_pct": 15,
-    "returning_customer_note": "Self-declared by customer — not verified (no auth in this demo). Accepted in good faith as per business policy."
+    "returning_customer_note": "Automatically detected via Luffa uid history when available. Falls back to self-declaration for web frontend users."
   },
 
   "negotiation": {
@@ -158,6 +163,13 @@
       "Fully insured — public liability covered",
       "Transparent pricing — no hidden call-out fees"
     ]
+  },
+
+  "self_help_diagnostic_visit": {
+    "base_price": 65,
+    "floor_price": 55,
+    "description": "Diagnostic visit — Gas Safe engineer attends to diagnose the issue and advise on next steps. Fee redeemable against the repair quoted on the day.",
+    "redeemable_note": "The £65 visit fee is fully offset if you go ahead with the repair on the same visit."
   },
 
   "gas_safety": {

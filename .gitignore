@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Virtual environment
+.venv/
+
+# Editor
+.vscode/
+
+# Build output
+_bmad-output/
+
+# LangGraph
+.langgraph_api/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

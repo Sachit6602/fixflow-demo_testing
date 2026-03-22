@@ -2,34 +2,53 @@
 FixFlow FastAPI application.
 
 Endpoints:
-  POST /api/session/start  — create a new quote session
-  POST /api/chat           — send a message to the agent
-  GET  /api/quotes         — retrieve quotes issued in the current session
-  GET  /health             — liveness probe
+  POST /api/session/start       — create a new quote session (web frontend)
+  POST /api/session/start-luffa — create a session with Luffa uid (auto-detects returning users)
+  GET  /api/session/lookup      — look up active session by Luffa uid
+  POST /api/chat                — send a message to the agent
+  GET  /api/quotes              — retrieve quotes issued in the current session
+  GET  /health                  — liveness probe
 
 Authentication: none (demo only — all endpoints are open).
-Data storage: in-memory only; clears on server restart.
+Data storage: quotes persisted to Supabase; session state in-memory via LangGraph MemorySaver.
 """
 from __future__ import annotations
+
+from dotenv import load_dotenv
+load_dotenv()
 
 import uuid
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 from pydantic import BaseModel
-
-load_dotenv()
 
 from pathlib import Path
 
 from app.graph import get_graph
+from app.config import load_business_config
 from app.state import initial_state
 
+import os
+import threading
+
 app = FastAPI(title="FixFlow API", version="1.0.0", docs_url="/docs")
+
+
+@app.on_event("startup")
+def start_luffa_bot():
+    """Launch Luffa bot polling in a background thread if LUFFA_SECRET is set."""
+    if os.environ.get("LUFFA_SECRET") and os.environ.get("LUFFA_SECRET") != "your_luffa_secret_here":
+        from luffa.bot import main_loop
+        thread = threading.Thread(target=main_loop, daemon=True)
+        thread.start()
+        print("[App] Luffa bot started as background thread")
+    else:
+        print("[App] LUFFA_SECRET not set — Luffa bot disabled")
 
 _FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=_FRONTEND_DIR), name="static")
@@ -41,9 +60,11 @@ def root():
 
 
 # In-memory quote store: session_id → list of quote dicts
-# (quotes are also stored in LangGraph state, but this provides a simple
-# /api/quotes endpoint without replaying the full graph)
 _quotes: Dict[str, List[Dict[str, Any]]] = {}
+
+# Luffa uid ↔ session_id mappings (in-memory, for active sessions only)
+_uid_sessions: Dict[str, str] = {}   # luffa_uid → session_id
+_session_uids: Dict[str, str] = {}   # session_id → luffa_uid
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -56,6 +77,17 @@ class StartRequest(BaseModel):
 class StartResponse(BaseModel):
     session_id: str
     customer_name: str
+    message: str
+
+
+class LuffaStartRequest(BaseModel):
+    luffa_uid: str
+    customer_name: str = "Customer"
+
+
+class LuffaStartResponse(BaseModel):
+    session_id: str
+    is_returning: bool
     message: str
 
 
@@ -98,18 +130,80 @@ async def start_session(req: StartRequest) -> StartResponse:
 
     _quotes[session_id] = []
 
+    biz = load_business_config()
+    brands = ", ".join(biz["supported_brands"])
+
     if req.is_returning:
         welcome = (
             f"Welcome back, {req.customer_name}! Great to see you again. "
             "As a returning customer, your loyalty discount will be automatically applied to your quote. "
-            "What can we help you with today?"
+            f"We service {brands} boilers across London — what can we help you with today?"
         )
     else:
         welcome = (
             f"Hi {req.customer_name}! I'm FixFlow, your 24/7 plumbing and boiler quote assistant. "
+            f"We cover emergency plumbing repairs, boiler servicing, repairs, and replacements for "
+            f"{brands} boilers across London. "
             "Describe your problem and I'll have a quote ready for you in under 60 seconds."
         )
     return StartResponse(session_id=session_id, customer_name=req.customer_name, message=welcome)
+
+
+@app.post("/api/session/start-luffa", response_model=LuffaStartResponse)
+async def start_luffa_session(req: LuffaStartRequest) -> LuffaStartResponse:
+    """
+    Create a new quote session using a Luffa uid.
+    Automatically detects returning users via Supabase quote history.
+    """
+    from app import persistence
+
+    user_record = persistence.get_or_create_user(req.luffa_uid, req.customer_name)
+    is_returning = persistence.is_returning_user(req.luffa_uid)
+    customer_type = "returning" if is_returning else "new"
+
+    # Use the name from Supabase if available, otherwise fall back to request
+    customer_name = user_record.get("customer_name") or req.customer_name
+    if customer_name == "Customer":
+        customer_name = ""  # Don't greet with generic "Customer"
+
+    session_id = str(uuid.uuid4())
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+
+    seed = initial_state(
+        session_id=session_id,
+        customer_name=customer_name or "Customer",
+        customer_type=customer_type,
+        luffa_uid=req.luffa_uid,
+    )
+    graph.update_state(config, seed)
+
+    _quotes[session_id] = []
+    _uid_sessions[req.luffa_uid] = session_id
+    _session_uids[session_id] = req.luffa_uid
+
+    name_part = f", {customer_name}" if customer_name else ""
+    if is_returning:
+        welcome = (
+            f"Welcome back{name_part}! "
+            "How can I help you today?"
+        )
+    else:
+        welcome = (
+            f"Hi{name_part}! I'm FixFlow — your 24/7 plumbing and boiler assistant. "
+            "How can I help you today?"
+        )
+
+    return LuffaStartResponse(session_id=session_id, is_returning=is_returning, message=welcome)
+
+
+@app.get("/api/session/lookup")
+async def lookup_session(luffa_uid: str) -> Dict[str, str]:
+    """Look up the active session for a Luffa user."""
+    session_id = _uid_sessions.get(luffa_uid)
+    if not session_id:
+        raise HTTPException(status_code=404, detail="No active session for this user.")
+    return {"session_id": session_id}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -130,10 +224,21 @@ async def chat(req: ChatRequest) -> ChatResponse:
         )
 
     try:
-        result = graph.invoke(
-            {"messages": [HumanMessage(content=req.message)]},
-            config=config,
-        )
+        # If the graph is paused at wait_for_input (interrupt between turns),
+        # resume with the new message. Otherwise, invoke from the start.
+        # We check for 'wait_for_input' specifically because update_state
+        # also sets snapshot.next (to 'input_guard') without an interrupt.
+        is_waiting = "wait_for_input" in (snapshot.next or ())
+        if is_waiting:
+            result = graph.invoke(
+                Command(resume=True, update={"messages": [HumanMessage(content=req.message)]}),
+                config=config,
+            )
+        else:
+            result = graph.invoke(
+                {"messages": [HumanMessage(content=req.message)]},
+                config=config,
+            )
     except Exception as exc:
         # Surface the error to the caller rather than silently failing
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
@@ -166,6 +271,21 @@ async def chat(req: ChatRequest) -> ChatResponse:
             })
             _quotes[req.session_id] = existing
 
+            # Persist to Supabase if this is a Luffa session
+            luffa_uid = _session_uids.get(req.session_id)
+            if luffa_uid:
+                try:
+                    from app import persistence
+                    persistence.record_quote(
+                        uid=luffa_uid,
+                        session_id=req.session_id,
+                        quote_ref=ref,
+                        job_type=result.get("job_type"),
+                        final_price=result.get("final_price"),
+                    )
+                except Exception as e:
+                    print(f"[Supabase] Failed to record quote: {e}")
+
     return ChatResponse(
         session_id=req.session_id,
         response=ai_response,
@@ -186,3 +306,43 @@ async def get_quotes(session_id: str) -> QuotesResponse:
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok", "service": "FixFlow API"}
+
+
+@app.get("/graph", response_class=HTMLResponse, include_in_schema=False)
+async def view_graph() -> HTMLResponse:
+    """
+    Render the LangGraph conditional-edge diagram as an interactive Mermaid chart.
+    Visit http://localhost:8000/graph in a browser to see the full routing map.
+    """
+    mermaid_src = get_graph().get_graph(xray=False).draw_mermaid()
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FixFlow — Agent Graph</title>
+  <style>
+    body {{ margin: 0; background: #0f1117; display: flex; flex-direction: column;
+           align-items: center; font-family: system-ui, sans-serif; color: #e2e8f0; }}
+    h1   {{ margin: 24px 0 8px; font-size: 1.3rem; letter-spacing: .05em; }}
+    p    {{ margin: 0 0 20px; font-size: .85rem; color: #94a3b8; }}
+    #graph {{ background: #1e2130; border-radius: 12px; padding: 24px;
+              max-width: 98vw; overflow: auto; box-shadow: 0 4px 24px #0008; }}
+    .mermaid {{ min-width: 700px; }}
+  </style>
+</head>
+<body>
+  <h1>FixFlow — Agent Routing Graph</h1>
+  <p>Conditional edges show every path the agent can take through its 11 nodes.</p>
+  <div id="graph">
+    <div class="mermaid">
+{mermaid_src}
+    </div>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({{ startOnLoad: true, theme: 'dark', flowchart: {{ curve: 'basis' }} }});
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
