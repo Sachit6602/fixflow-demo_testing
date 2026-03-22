@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables (secrets)
+.env
+
+# SQLite (Phase 2 persistence)
+data/users.db
+
+# OS
+.DS_Store

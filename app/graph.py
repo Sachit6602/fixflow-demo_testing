@@ -46,6 +46,12 @@ def _route_input_guard(state: QuoteState) -> str:
 
 
 def _route_intent(state: QuoteState) -> str:
+    # If conversation ended (escalation, safety, etc.), no more processing
+    if state.get("phase") in ("ended", "escalated"):
+        return "output_guard"
+    # If quote already issued, skip to negotiation (handles pushback + slot selection)
+    if state.get("quote_issued"):
+        return "negotiation"
     intent = state.get("intent")
     if intent in ("general_enquiry", "complaint", "emergency"):
         return "output_guard"
