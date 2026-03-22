@@ -71,6 +71,7 @@ def check_timeouts():
         if now - ts > SESSION_TIMEOUT_SECS
     ]
     for uid in timed_out:
+        print(f"[Timeout] {uid}: inactive for {now - last_activity[uid]:.0f}s, timing out")
         send_message(uid, (
             "It looks like you've been away for a bit — this session has timed out. "
             "Send a new message anytime to start a fresh conversation!"
@@ -168,9 +169,11 @@ def handle_text_message(uid: str, text: str):
             reply += f"\n\nQuote Ref: {quote_ref}"
 
         send_message(uid, reply)
+        print(f"[Debug] {uid}: phase={phase}")
 
         # Session ended (/end command, safety hard-stop, etc.) — clear so next msg starts fresh
         if phase == "ended":
+            print(f"[Debug] {uid}: phase is ended, clearing session")
             clear_session(uid)
             return
 
