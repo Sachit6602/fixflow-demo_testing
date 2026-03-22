@@ -16,6 +16,7 @@ Env vars:
 import json
 import os
 import time
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -184,6 +185,22 @@ def handle_payment_response(uid: str, text: str):
     if stripped == "1":
         response = handle_payment_confirmation(uid, BUSINESS_NAME, payment["final_price"])
         send_message(uid, response)
+
+        # Dashboard: mark quote as accepted and paid
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent))
+            from app.persistence import mark_quote_accepted, log_event
+            tx_ref = response.split("Transaction: ")[1].split("\n")[0] if "Transaction:" in response else None
+            mark_quote_accepted(payment["quote_ref"], payment["final_price"], tx_ref)
+            # Find session_id for this uid
+            sid = active_sessions.get(uid)
+            if sid:
+                log_event(sid, "quote_accepted", {"quote_ref": payment["quote_ref"], "slot": payment.get("slot")}, uid)
+                log_event(sid, "payment_confirmed", {"quote_ref": payment["quote_ref"], "amount": payment["final_price"], "tx_ref": tx_ref}, uid)
+        except Exception as e:
+            print(f"[Dashboard] Payment capture failed: {e}")
+
         # Clear payment state and session so next message starts fresh
         del pending_payments[uid]
         active_sessions.pop(uid, None)
