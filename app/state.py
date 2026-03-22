@@ -47,6 +47,7 @@ class QuoteState(TypedDict):
     boiler_brand: Optional[str]         # confirmed supported brand (Vaillant/Baxi/Ideal)
     luffa_uid: Optional[str]           # Luffa user ID, None for web frontend sessions
     postcode: Optional[str]
+    postcode_captured: bool              # True when postcode_capture successfully extracts; drives routing
     ulez_zone: Optional[str]            # "inner" | "outer" | "outside"
 
     # ── Availability ─────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ def initial_state(session_id: str, customer_name: str, customer_type: str = "new
         "boiler_brand": None,
         "luffa_uid": luffa_uid,
         "postcode": None,
+        "postcode_captured": False,
         "ulez_zone": None,
         "urgency_tier": None,
         "availability_slots": [],

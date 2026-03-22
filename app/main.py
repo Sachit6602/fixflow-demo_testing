@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from pathlib import Path
@@ -223,10 +224,21 @@ async def chat(req: ChatRequest) -> ChatResponse:
         )
 
     try:
-        result = graph.invoke(
-            {"messages": [HumanMessage(content=req.message)]},
-            config=config,
-        )
+        # If the graph is paused at wait_for_input (interrupt between turns),
+        # resume with the new message. Otherwise, invoke from the start.
+        # We check for 'wait_for_input' specifically because update_state
+        # also sets snapshot.next (to 'input_guard') without an interrupt.
+        is_waiting = "wait_for_input" in (snapshot.next or ())
+        if is_waiting:
+            result = graph.invoke(
+                Command(resume=True, update={"messages": [HumanMessage(content=req.message)]}),
+                config=config,
+            )
+        else:
+            result = graph.invoke(
+                {"messages": [HumanMessage(content=req.message)]},
+                config=config,
+            )
     except Exception as exc:
         # Surface the error to the caller rather than silently failing
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc

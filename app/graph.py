@@ -1,40 +1,57 @@
 """
 LangGraph graph definition for FixFlow.
 
-Phase-based routing — each turn enters the graph at the correct node:
+Cyclic graph with interrupt-based multi-turn conversation:
 
-  EVERY TURN:
-    START → input_guard
-              ├─ safety triggered ─────────────────────────────────────────► output_guard → END
-              └─ safe → phase router
-                            │
-                            ├─ phase="intake"          → intent_classifier
-                            │       ├─ non-quote       → output_guard → END
-                            │       └─ quote_request   → diagnostic
-                            │                               ├─ incomplete → output_guard → END
-                            │                               └─ complete   → job_classifier
-                            │                                                   ├─ out of scope → output_guard → END
-                            │                                                   ├─ escalation   → authority_check → output_guard → END
-                            │                                                   └─ in scope     → availability → pricing → negotiation → authority_check → output_guard → END
-                            │
-                            ├─ phase="diagnosis"       → diagnostic (same sub-graph as above)
-                            │
-                            ├─ phase="quoting"           → negotiation → authority_check → output_guard → END
-                            ├─ phase="negotiating"       → negotiation → authority_check → output_guard → END
-                            ├─ phase="booked"            → output_guard (resets to intake) → END
-                            ├─ phase="self_help"         → self_help_followup → output_guard → END
-                            ├─ phase="awaiting_postcode" → postcode_capture → pricing → negotiation → authority_check → output_guard → END
-                            │
-                            └─ phase="escalated"/"ended" → output_guard → END
+  Turn 1 (first message):
+    START → input_guard → (phase router) → ... → output_guard
+              │                                        │
+              │              ┌─ terminal (ended/escalated) → END
+              │              │
+              │              └─ continuing → wait_for_input ──┐
+              │                     ▲            (interrupt)  │
+              │                     │                         │
+              └─────────────────────┴─────────────────────────┘
+                              (loop back)
 
-Key property: turns 2+ in diagnosis skip intent_classifier entirely.
-Turns in quoting/negotiating skip diagnosis, classification, availability, pricing.
-LangSmith traces show only the nodes that actually ran.
+  Turn 2+ (resume from interrupt with new message):
+    wait_for_input → input_guard → (phase router) → ... → output_guard
+                                                              │
+                                   ┌─ terminal → END          │
+                                   │                          │
+                                   └─ continuing → wait_for_input (interrupt)
+
+  Phase router (input_guard):
+    ├─ intake            → intent_classifier
+    │       ├─ non-quote       → output_guard
+    │       └─ quote_request   → diagnostic
+    │                               ├─ incomplete → output_guard
+    │                               └─ complete   → job_classifier
+    │                                                   ├─ out of scope → output_guard
+    │                                                   ├─ escalation   → authority_check → output_guard
+    │                                                   └─ in scope     → availability → pricing → negotiation → authority_check → output_guard
+    ├─ diagnosis         → diagnostic (loops back for each question)
+    ├─ quoting           → negotiation → authority_check → output_guard (loops for pushback rounds)
+    ├─ negotiating       → negotiation → authority_check → output_guard
+    ├─ booked            → output_guard (resets to intake, loops back)
+    ├─ self_help         → self_help_followup → output_guard (loops for clarification)
+    ├─ awaiting_postcode → postcode_capture
+    │                         ├─ success → pricing → ... → output_guard
+    │                         └─ failure → output_guard (loops for retry)
+    └─ escalated/ended   → output_guard → END
+
+Visible loops in LangSmith Studio:
+  • Diagnostic loop     — output_guard → wait → input_guard → diagnostic → output_guard
+  • Negotiation loop    — output_guard → wait → input_guard → negotiation → ... → output_guard
+  • Postcode retry loop — output_guard → wait → input_guard → postcode_capture → output_guard
+  • Self-help loop      — output_guard → wait → input_guard → self_help_followup → output_guard
+  • Session restart     — output_guard → wait → input_guard → intent_classifier → diagnostic → ...
 """
 from __future__ import annotations
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 
 from app.nodes.authority_check import authority_check_node
 from app.nodes.availability import availability_node
@@ -48,6 +65,20 @@ from app.nodes.postcode_capture import postcode_capture_node
 from app.nodes.pricing import pricing_node
 from app.nodes.self_help_followup import self_help_followup_node
 from app.state import QuoteState
+
+
+# ── Wait-for-input node (interrupt point) ────────────────────────────────────
+
+def wait_for_input_node(state: QuoteState) -> dict:
+    """Pause the graph and wait for the next human message.
+
+    This node is the loop-back point between turns. After output_guard
+    delivers a response, continuing (non-terminal) conversations route
+    here. The interrupt() call pauses execution; on resume, the graph
+    continues to input_guard with the new message in state.
+    """
+    interrupt("waiting_for_user_input")
+    return {}
 
 
 # ── Conditional routing functions ────────────────────────────────────────────
@@ -129,6 +160,35 @@ def _route_job_classifier(state: QuoteState) -> str:
     return "availability"
 
 
+def _route_postcode_capture(state: QuoteState) -> str:
+    """Route after postcode capture: success → pricing, failure → output_guard.
+
+    On failure the node sets a retry carrier message and keeps
+    phase="awaiting_postcode". Routing to output_guard directly avoids
+    running pricing/negotiation/authority_check needlessly.
+    """
+    if state.get("postcode_captured"):
+        return "pricing"
+    return "output_guard"
+
+
+def _route_output_guard(state: QuoteState) -> str:
+    """Route after output_guard: terminal phases end the graph,
+    continuing phases loop back via wait_for_input → input_guard.
+
+    This creates visible cycles in the LangSmith Studio graph for:
+      • diagnostic multi-question loop
+      • negotiation pushback rounds
+      • postcode retry loop
+      • self-help clarification loop
+      • session restart (out-of-scope / post-booking → new request)
+    """
+    phase = state.get("phase", "intake")
+    if phase in ("ended", "escalated"):
+        return "__end__"
+    return "wait_for_input"
+
+
 # ── Graph builder ────────────────────────────────────────────────────────────
 
 def build_graph() -> StateGraph:
@@ -145,8 +205,12 @@ def build_graph() -> StateGraph:
     builder.add_node("output_guard", output_guard_node)
     builder.add_node("self_help_followup", self_help_followup_node)
     builder.add_node("postcode_capture", postcode_capture_node)
+    builder.add_node("wait_for_input", wait_for_input_node)
 
+    # ── Entry ─────────────────────────────────────────────────────────────────
     builder.add_edge(START, "input_guard")
+
+    # ── input_guard → phase-based routing ─────────────────────────────────────
     builder.add_conditional_edges(
         "input_guard",
         _route_input_guard,
@@ -159,6 +223,8 @@ def build_graph() -> StateGraph:
             "output_guard":       "output_guard",
         },
     )
+
+    # ── intent_classifier → diagnostic / negotiation / output_guard ───────────
     builder.add_conditional_edges(
         "intent_classifier",
         _route_intent,
@@ -168,6 +234,8 @@ def build_graph() -> StateGraph:
             "negotiation":  "negotiation",
         },
     )
+
+    # ── diagnostic → output_guard (question) / job_classifier (complete) ──────
     builder.add_conditional_edges(
         "diagnostic",
         _route_diagnostic,
@@ -176,22 +244,49 @@ def build_graph() -> StateGraph:
             "job_classifier": "job_classifier",
         },
     )
+
+    # ── job_classifier → availability / authority_check / output_guard ────────
     builder.add_conditional_edges(
         "job_classifier",
         _route_job_classifier,
         {
-            "output_guard":   "output_guard",
+            "output_guard":    "output_guard",
             "authority_check": "authority_check",
-            "availability":   "availability",
+            "availability":    "availability",
         },
     )
+
+    # ── Linear pipeline: availability → pricing → negotiation → authority ────
     builder.add_edge("availability", "pricing")
     builder.add_edge("pricing", "negotiation")
     builder.add_edge("negotiation", "authority_check")
     builder.add_edge("authority_check", "output_guard")
+
+    # ── self_help_followup → output_guard ─────────────────────────────────────
     builder.add_edge("self_help_followup", "output_guard")
-    builder.add_edge("postcode_capture", "pricing")
-    builder.add_edge("output_guard", END)
+
+    # ── postcode_capture → pricing (success) / output_guard (failure) ────────
+    builder.add_conditional_edges(
+        "postcode_capture",
+        _route_postcode_capture,
+        {
+            "pricing":      "pricing",
+            "output_guard": "output_guard",
+        },
+    )
+
+    # ── output_guard → END (terminal) or wait_for_input (loop back) ──────────
+    builder.add_conditional_edges(
+        "output_guard",
+        _route_output_guard,
+        {
+            "__end__":         END,
+            "wait_for_input":  "wait_for_input",
+        },
+    )
+
+    # ── wait_for_input → input_guard (the backward loop edge) ────────────────
+    builder.add_edge("wait_for_input", "input_guard")
 
     return builder
 

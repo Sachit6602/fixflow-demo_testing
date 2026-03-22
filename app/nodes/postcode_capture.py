@@ -53,6 +53,7 @@ def postcode_capture_node(state: QuoteState) -> Dict[str, Any]:
                         "Could you double-check? We serve E, N, NW, SE, SW, W, WC, and EC postcodes."
                     ),
                     "phase": "awaiting_postcode",
+                    "postcode_captured": False,
                 }
 
             # Clear current price so pricing_node re-runs with correct ULEZ zone
@@ -62,6 +63,7 @@ def postcode_capture_node(state: QuoteState) -> Dict[str, Any]:
                 "final_price": None,
                 "ulez_zone": None,
                 "ulez_surcharge": 0.0,
+                "postcode_captured": True,
             }
 
     # Couldn't find a postcode — ask again via carrier
@@ -71,4 +73,5 @@ def postcode_capture_node(state: QuoteState) -> Dict[str, Any]:
             "For example: SW1A, E14, or NW3."
         ),
         "phase": "awaiting_postcode",
+        "postcode_captured": False,
     }
