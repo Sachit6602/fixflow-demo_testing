@@ -35,8 +35,13 @@ Your task:
 3. Extract their postcode if explicitly mentioned.
 4. ONLY for non-quote intents, write a brief response in non_quote_response.
 
-CRITICAL CLASSIFICATION RULE:
-Default to 'quote_request' for ANY of the following — even if vague:
+CLASSIFICATION RULES:
+
+Use 'greeting' for:
+  - Pure greetings with no service request ("hi", "hello", "hey", "good morning", "howdy")
+  - Conversational openers that don't mention a problem yet
+
+Use 'quote_request' for ANY of the following — even if vague:
   - Describing a problem ("my boiler isn't working", "no hot water", "pipe is leaking")
   - Asking about price or cost
   - Describing symptoms of any plumbing or boiler issue
@@ -49,7 +54,8 @@ Only use other intents when unambiguous:
   - complaint: explicitly unhappy about a PAST job
   - emergency: life-threatening situation NOT related to gas (gas is handled separately)
 
-When in doubt, choose quote_request.
+When in doubt between greeting and quote_request, choose greeting.
+When in doubt between quote_request and general_enquiry, choose quote_request.
 """
 
 

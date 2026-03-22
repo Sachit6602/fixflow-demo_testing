@@ -55,9 +55,12 @@ class PromptInjectionCheck(BaseModel):
 # ── Intent Classifier ────────────────────────────────────────────────────────
 
 class IntentClassification(BaseModel):
-    intent: Literal["quote_request", "general_enquiry", "complaint", "emergency"] = Field(
+    intent: Literal["greeting", "quote_request", "general_enquiry", "complaint", "emergency"] = Field(
         description=(
-            "quote_request: customer wants a price or appointment for a job. "
+            "greeting: a hello, hi, hey, good morning, or any conversational opener "
+            "that does NOT yet describe a problem or request a service. "
+            "quote_request: customer wants a price or appointment for a job, "
+            "or is describing a problem/symptom (even vaguely). "
             "general_enquiry: question about services, hours, coverage, etc. "
             "complaint: unhappy about a previous job or interaction. "
             "emergency: life-threatening situation (not gas — handled by Input Guard)."

@@ -99,7 +99,7 @@ def _route_intent(state: QuoteState) -> str:
     if state.get("quote_issued"):
         return "negotiation"
     intent = state.get("intent")
-    if intent in ("general_enquiry", "complaint", "emergency"):
+    if intent in ("greeting", "general_enquiry", "complaint", "emergency"):
         return "output_guard"
     return "diagnostic"
 

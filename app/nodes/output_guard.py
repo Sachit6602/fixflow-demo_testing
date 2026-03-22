@@ -102,6 +102,21 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
 
     intent = state.get("intent")
 
+    # ── Greeting — respond and stay in intake ─────────────────────────────────
+    if intent == "greeting":
+        customer_name = state.get("customer_name", "")
+        name_part = f", {customer_name}" if customer_name and customer_name != "Customer" else ""
+        text = (
+            f"Hey there{name_part}! Welcome to FixFlow — your 24/7 plumbing and boiler assistant. "
+            "How can I help you today?"
+        )
+        return {
+            "messages": [AIMessage(content=text)],
+            "phase": "intake",
+            "intent": None,
+            "next_diagnostic_question": None,
+        }
+
     # ── Non-quote intent response ─────────────────────────────────────────────
     if intent in ("general_enquiry", "complaint", "emergency"):
         # intent_classifier stored its response in next_diagnostic_question
