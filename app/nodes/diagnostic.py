@@ -116,13 +116,21 @@ def diagnostic_node(state: QuoteState) -> Dict[str, Any]:
         if result.postcode_extracted:
             updates["postcode"] = result.postcode_extracted
 
-        # Force completion if at question limit
-        is_complete = result.diagnostic_complete or questions_remaining == 0
+        # Force completion if at question limit — but NEVER complete without a brand
+        has_brand = boiler_brand or updates.get("boiler_brand")
+        is_complete = (result.diagnostic_complete or questions_remaining == 0) and has_brand
         updates["diagnostic_complete"] = is_complete
 
-        if not is_complete and result.next_question:
+        if not is_complete:
+            # If LLM didn't provide a question, supply the brand gate question
+            question = result.next_question
+            if not question:
+                if not has_brand:
+                    question = "What make is your boiler? We service Vaillant, Baxi, Ideal, and LG."
+                else:
+                    question = "Could you describe what's happening with your boiler or plumbing?"
             updates["diagnostic_questions_asked"] = questions_asked + 1
-            updates["next_diagnostic_question"] = result.next_question
+            updates["next_diagnostic_question"] = question
         else:
             updates["next_diagnostic_question"] = None
 
