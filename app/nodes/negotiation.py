@@ -80,7 +80,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
 
     customer_type = state.get("customer_type", "new")
     negotiation_round = state.get("negotiation_round", 0)
-    calculated_price = state.get("calculated_price", 0.0)
+    calculated_price = state.get("calculated_price") or 0.0
     floor_price = state.get("floor_price", calculated_price * 0.8)
 
     max_discount = (
@@ -137,7 +137,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
                 slot_text = "your preferred time"
 
             ref = state.get("quote_reference", "N/A")
-            final = state.get("final_price") or state.get("calculated_price", 0.0)
+            final = state.get("final_price") or state.get("calculated_price") or 0.0
             job_label = (state.get("job_type") or "").replace("_", " ").title()
 
             # ── Create Google Calendar event via Civic MCP ────────────────
@@ -209,7 +209,6 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
         # ── Reschedule request ────────────────────────────────────────────────────
         if result.reschedule_request:
             import datetime
-            availability_data = load_availability()
             pref = (result.slot_date_preference or "").lower()
 
             # Pick the tier that matches what the customer asked for.
@@ -224,23 +223,33 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             tier_cfg = config["urgency_tiers"].get(tier, {})
             new_multiplier = float(tier_cfg.get("multiplier", 1.0))
             base_price = float(state.get("base_price") or 0.0)
-            ulez_surcharge = state.get("ulez_surcharge", 0.0)
-            parts_estimate = state.get("parts_estimate", 0.0)
+            ulez_surcharge = state.get("ulez_surcharge") or 0.0
+            parts_estimate = state.get("parts_estimate") or 0.0
             new_price = round((base_price * new_multiplier) + ulez_surcharge + parts_estimate, 2)
             floor = float(state.get("floor_price") or 0.0)
             new_price = max(new_price, floor)
 
             # Reapply existing discount if one was negotiated
-            existing_discount = state.get("discount_pct", 0.0)
+            existing_discount = state.get("discount_pct") or 0.0
             if existing_discount > 0:
                 discounted = new_price * (1 - existing_discount / 100)
                 new_final = max(round(discounted, 2), floor)
             else:
                 new_final = new_price
 
-            # Resolve date placeholders to human-readable dates.
-            raw_slots = availability_data["slots"].get(tier, [])[:3]
-            slots = resolve_slot_dates(raw_slots)
+            # Priority 1: Live Google Calendar via Civic MCP
+            slots = []
+            try:
+                from app.calendar import find_free_slots as calendar_find_free_slots
+                slots = calendar_find_free_slots(tier)
+            except Exception:
+                slots = []
+
+            # Priority 2: Static slots from availability.json
+            if not slots:
+                availability_data = load_availability()
+                raw_slots = availability_data["slots"].get(tier, [])[:3]
+                slots = resolve_slot_dates(raw_slots)
 
             slot_lines = "\n".join(
                 f"  {i}. {s['date']}  {s['time']}"
@@ -269,34 +278,42 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
         # ── Cheaper slot request ──────────────────────────────────────────────────
         if result.cheaper_slot_request:
             import datetime
-            availability_data = load_availability()
             wa_tier = "weekday_afternoon"
             wa_cfg = config["urgency_tiers"].get(wa_tier, {})
             wa_multiplier = float(wa_cfg.get("multiplier", 1.0))
             wa_label = wa_cfg.get("label", "Weekday afternoon")
 
-            # Filter to actual weekday days before resolving dates
-            today_dt = datetime.date.today()
-            raw_all = availability_data["slots"].get(wa_tier, [])
-            weekday_raw = []
-            for s in raw_all:
-                raw_date = s.get("date", "")
-                if raw_date.startswith("day_"):
-                    try:
-                        n = int(raw_date.split("_", 1)[1])
-                        if (today_dt + datetime.timedelta(days=n)).weekday() < 5:
-                            weekday_raw.append(s)
-                    except (ValueError, IndexError):
-                        weekday_raw.append(s)
-                else:
-                    weekday_raw.append(s)
+            # Priority 1: Live Google Calendar via Civic MCP
+            slots = []
+            try:
+                from app.calendar import find_free_slots as calendar_find_free_slots
+                slots = calendar_find_free_slots(wa_tier)
+            except Exception:
+                slots = []
 
-            slots = resolve_slot_dates(weekday_raw[:3])
+            # Priority 2: Static slots from availability.json (weekday filter)
+            if not slots:
+                availability_data = load_availability()
+                today_dt = datetime.date.today()
+                raw_all = availability_data["slots"].get(wa_tier, [])
+                weekday_raw = []
+                for s in raw_all:
+                    raw_date = s.get("date", "")
+                    if raw_date.startswith("day_"):
+                        try:
+                            n = int(raw_date.split("_", 1)[1])
+                            if (today_dt + datetime.timedelta(days=n)).weekday() < 5:
+                                weekday_raw.append(s)
+                        except (ValueError, IndexError):
+                            weekday_raw.append(s)
+                    else:
+                        weekday_raw.append(s)
+                slots = resolve_slot_dates(weekday_raw[:3])
 
             # Recalculate price with the cheaper multiplier
             base_price = float(state.get("base_price") or 0.0)
-            ulez_surcharge = state.get("ulez_surcharge", 0.0)
-            parts_estimate = state.get("parts_estimate", 0.0)
+            ulez_surcharge = state.get("ulez_surcharge") or 0.0
+            parts_estimate = state.get("parts_estimate") or 0.0
             new_price = round((base_price * wa_multiplier) + ulez_surcharge + parts_estimate, 2)
             floor = float(state.get("floor_price") or 0.0)
             new_price = max(new_price, floor)
