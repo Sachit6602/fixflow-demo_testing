@@ -55,7 +55,7 @@ class PromptInjectionCheck(BaseModel):
 # ── Intent Classifier ────────────────────────────────────────────────────────
 
 class IntentClassification(BaseModel):
-    intent: Literal["greeting", "quote_request", "general_enquiry", "complaint", "emergency"] = Field(
+    intent: Literal["greeting", "quote_request", "general_enquiry", "complaint", "emergency", "farewell"] = Field(
         description=(
             "greeting: a hello, hi, hey, good morning, or any conversational opener "
             "that does NOT yet describe a problem or request a service. "
@@ -63,7 +63,10 @@ class IntentClassification(BaseModel):
             "or is describing a problem/symptom (even vaguely). "
             "general_enquiry: question about services, hours, coverage, etc. "
             "complaint: unhappy about a previous job or interaction. "
-            "emergency: life-threatening situation (not gas — handled by Input Guard)."
+            "emergency: life-threatening situation (not gas — handled by Input Guard). "
+            "farewell: the customer is saying goodbye, declining further help, or "
+            "wrapping up. Signals: 'no thanks', 'that's all', 'bye', 'nothing else', "
+            "'I'm good', 'all done', 'no', 'nope' (when asked if they need more help)."
         )
     )
     customer_type: Literal["new", "returning"] = Field(

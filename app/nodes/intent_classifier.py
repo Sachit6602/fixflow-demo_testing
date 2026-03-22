@@ -52,6 +52,7 @@ Only use other intents when unambiguous:
   - general_enquiry: clearly asking a factual question ("what areas do you cover?", "what brands do you service?")
   - complaint: explicitly unhappy about a PAST job
   - emergency: life-threatening situation NOT related to gas (gas is handled separately)
+  - farewell: the customer is saying goodbye or declining further help ("no thanks", "that's all", "bye", "nothing else", "I'm good", "nope")
 
 When in doubt between greeting and quote_request, choose greeting.
 When in doubt between quote_request and general_enquiry, choose quote_request.

@@ -48,6 +48,10 @@ def job_classifier_node(state: QuoteState) -> Dict[str, Any]:
     if state.get("job_type") is not None:
         return {}
 
+    # Pass through — diagnostic already determined out-of-scope (e.g. unsupported brand)
+    if not state.get("in_scope", True):
+        return {}
+
     config = load_business_config()
     brands = ", ".join(config["supported_brands"])
     job_type_keys = ", ".join(config["supported_job_types"].keys())

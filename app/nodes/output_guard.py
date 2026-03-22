@@ -124,6 +124,21 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             "next_diagnostic_question": None,
         }
 
+    # ── Farewell — customer is done ─────────────────────────────────────────────
+    if intent == "farewell":
+        customer_name = state.get("customer_name", "")
+        name_part = f", {customer_name}" if customer_name and customer_name != "Customer" else ""
+        text = (
+            f"Thanks for using FixFlow{name_part}! "
+            f"If you ever need help again, just start a new conversation. "
+            f"For urgent issues, call us anytime at **{config['business']['phone']}**. "
+            "Have a great day!"
+        )
+        return {
+            "messages": [AIMessage(content=text)],
+            "phase": "ended",
+        }
+
     # ── Non-quote intent response ─────────────────────────────────────────────
     if intent in ("general_enquiry", "complaint", "emergency"):
         # intent_classifier stored its response in next_diagnostic_question
@@ -147,16 +162,24 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
         }
 
     # ── Out-of-scope ──────────────────────────────────────────────────────────
-    if not state.get("in_scope", True) and state.get("job_type"):
+    if not state.get("in_scope", True):
         carrier = state.get("next_diagnostic_question")
         text = carrier or (
             f"We currently service **{', '.join(config['supported_brands'])}** boilers "
             "in London. If you have one of those brands, I'm happy to help — "
             "otherwise I'd recommend contacting a specialist for your make and model."
         )
+        text += "\n\nIs there anything else I can help you with?"
         return {
             "messages": [AIMessage(content=text)],
-            "phase": "ended",
+            "phase": "intake",
+            "intent": None,
+            "in_scope": True,
+            "diagnostic_complete": False,
+            "boiler_brand": None,
+            "job_type": None,
+            "symptoms": [],
+            "diagnostic_questions_asked": 0,
             "next_diagnostic_question": None,
         }
 
@@ -204,7 +227,11 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             f"If you need to make any changes, please call us at **{phone}**. "
             "Is there anything else I can help you with?"
         )
-        return {"messages": [AIMessage(content=text)]}
+        return {
+            "messages": [AIMessage(content=text)],
+            "phase": "intake",
+            "intent": None,
+        }
 
     # ── Self-help (offer DIY steps before quoting, when job supports it) ─────
     # Only offered once. On the next turn self_help_offered=True, we skip
@@ -291,12 +318,13 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
     # ── Post-quote (quote already sent, no new negotiation response) ─────────
     if state.get("quote_issued") and not next_q:
         text = (
-            "Your quote has been sent! If you'd like to discuss it or need "
-            "a new quote for a different issue, just let us know."
+            "Is there anything else I can help you with? "
+            "I can quote for a different issue or answer any questions."
         )
         return {
             "messages": [AIMessage(content=text)],
-            "phase": "ended",
+            "phase": "intake",
+            "intent": None,
         }
 
     # ── Quote response ────────────────────────────────────────────────────────

@@ -87,13 +87,22 @@ def self_help_followup_node(state: QuoteState) -> Dict[str, Any]:
     if result.outcome == "resolved":
         return {
             "next_diagnostic_question": (
-                "That's great news — glad you got it sorted! 🎉\n\n"
+                "That's great news — glad you got it sorted!\n\n"
                 "No engineer needed and no call-out charge. "
-                "If the issue comes back (or if the pressure keeps dropping), "
-                "just start a new chat and we'll get you booked in straight away. "
-                "Have a great day!"
+                "If the issue comes back, just let us know.\n\n"
+                "Is there anything else I can help you with?"
             ),
-            "phase": "ended",
+            "phase": "intake",
+            "intent": None,
+            "diagnostic_complete": False,
+            "boiler_brand": None,
+            "job_type": None,
+            "symptoms": [],
+            "diagnostic_questions_asked": 0,
+            "quote_issued": False,
+            "self_help_offered": False,
+            "calculated_price": None,
+            "final_price": None,
         }
 
     # ── Not resolved — ask for postcode first, then offer diagnostic visit ───────
