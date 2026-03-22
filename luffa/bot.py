@@ -110,14 +110,8 @@ def ensure_session(uid: str) -> str:
     if uid in active_sessions:
         return active_sessions[uid]
 
-    # Check if server already has an active session for this uid
-    lookup = requests.get(f"{FIXFLOW_BASE}/api/session/lookup", params={"luffa_uid": uid})
-    if lookup.ok:
-        session_id = lookup.json()["session_id"]
-        active_sessions[uid] = session_id
-        print(f"[FixFlow] Resumed session for {uid}: {session_id}")
-        return session_id
-
+    # Always create a fresh session — don't resume old server sessions
+    # which may be in a dead/ended state.
     # Create a new FixFlow session with uid-based returning user detection
     resp = requests.post(
         f"{FIXFLOW_BASE}/api/session/start-luffa",
