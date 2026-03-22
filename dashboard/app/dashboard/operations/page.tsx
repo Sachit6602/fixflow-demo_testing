@@ -1,30 +1,25 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { KpiCard } from "@/components/dashboard/kpi-card"
+import { useDataSource } from "@/lib/data-context"
 import {
-  kpiOperations,
-  negotiationStats,
-  safetyLog,
-  jobTypeVolume,
-} from "@/lib/sample-data"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts"
+  getKpiOperations,
+  getNegotiationStats,
+  getSafetyLog,
+  getJobTypeVolume,
+} from "@/lib/data-provider"
 import { cn } from "@/lib/utils"
 
 const triggerStyles: Record<string, string> = {
   "Gas Smell": "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  "Safety Trigger": "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   "Authority Block": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   "Prompt Injection": "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   "Out-of-scope Brand": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   "Out-of-scope Location": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  "Out of Scope": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
 }
 
 const actionStyles: Record<string, string> = {
@@ -48,7 +43,39 @@ function StatRow({ label, value, unit, note }: { label: string; value: number | 
 }
 
 export default function OperationsPage() {
-  const maxJobVolume = Math.max(...jobTypeVolume.map((j) => j.value))
+  const { isLive } = useDataSource()
+  const [kpi, setKpi] = useState<any>(null)
+  const [negStats, setNegStats] = useState<any>(null)
+  const [safety, setSafety] = useState<any[]>([])
+  const [jobVolume, setJobVolume] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      getKpiOperations(isLive),
+      getNegotiationStats(isLive),
+      getSafetyLog(isLive),
+      getJobTypeVolume(isLive),
+    ]).then(([k, n, s, j]) => {
+      if (cancelled) return
+      setKpi(k); setNegStats(n); setSafety(s); setJobVolume(j)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [isLive])
+
+  if (loading || !kpi || !negStats) {
+    return (
+      <div className="p-6 max-w-[1400px] mx-auto">
+        <PageHeader title="Operations" description="Agent performance, safety events, and job breakdown" />
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  const maxJobVolume = Math.max(...jobVolume.map((j) => j.value), 1)
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -58,25 +85,25 @@ export default function OperationsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <KpiCard
           title="Avg Response Time"
-          value={kpiOperations.avgResponseTime.value}
+          value={kpi.avgResponseTime.value}
           suffix="sec"
-          change={kpiOperations.avgResponseTime.change}
+          change={kpi.avgResponseTime.change}
           badge={{ label: "↓ improving", variant: "green" }}
         />
         <KpiCard
           title="Safety Triggers"
-          value={kpiOperations.safetyTriggers.value}
-          badge={{ label: "amber alert", variant: "amber" }}
+          value={kpi.safetyTriggers.value}
+          badge={{ label: kpi.safetyTriggers.severity === "red" ? "red alert" : "amber alert", variant: kpi.safetyTriggers.severity === "red" ? "red" : "amber" }}
         />
         <KpiCard
           title="Escalations"
-          value={kpiOperations.escalations.value}
-          badge={{ label: `+${kpiOperations.escalations.change} vs last week`, variant: "amber" }}
+          value={kpi.escalations.value}
+          badge={{ label: `+${kpi.escalations.change} vs last week`, variant: "amber" }}
         />
         <KpiCard
           title="Out-of-Scope Requests"
-          value={kpiOperations.outOfScope.value}
-          badge={{ label: `${kpiOperations.outOfScope.change} vs last week`, variant: "green" }}
+          value={kpi.outOfScope.value}
+          badge={{ label: `${kpi.outOfScope.change} vs last week`, variant: "green" }}
         />
       </div>
 
@@ -87,22 +114,22 @@ export default function OperationsPage() {
           <h2 className="text-sm font-semibold text-foreground mb-4">Negotiation Statistics</h2>
           <StatRow
             label="Pushback Rate"
-            value={`${negotiationStats.pushbackRate}%`}
+            value={`${negStats.pushbackRate}%`}
             note="Quotes where customer challenged the price"
           />
           <StatRow
             label="Average Discount Given"
-            value={`${negotiationStats.avgDiscountGiven}%`}
+            value={`${negStats.avgDiscountGiven}%`}
             note="Mean discount across all negotiated quotes"
           />
           <StatRow
             label="Floor Price Hit Rate"
-            value={`${negotiationStats.floorPriceHitRate}%`}
+            value={`${negStats.floorPriceHitRate}%`}
             note="Negotiations that reached the minimum floor price"
           />
           <StatRow
             label="Competitor Match Attempts"
-            value={negotiationStats.competitorMatchAttempts}
+            value={negStats.competitorMatchAttempts}
             note="Customers who mentioned a competitor price"
           />
 
@@ -135,7 +162,7 @@ export default function OperationsPage() {
         <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-foreground mb-4">Job Type Volume</h2>
           <div className="flex flex-col gap-2.5">
-            {jobTypeVolume.map((job) => (
+            {jobVolume.map((job) => (
               <div key={job.name}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted-foreground">{job.name}</span>
@@ -169,7 +196,7 @@ export default function OperationsPage() {
               </tr>
             </thead>
             <tbody>
-              {safetyLog.map((row) => (
+              {safety.map((row) => (
                 <tr key={row.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
                   <td className="py-3 pr-4 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{row.time}</td>
                   <td className="py-3 pr-4 text-foreground font-medium">{row.customer}</td>
