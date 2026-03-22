@@ -120,7 +120,8 @@ def diagnostic_node(state: QuoteState) -> Dict[str, Any]:
 
         # Force completion if at question limit — but NEVER complete without a brand
         has_brand = bool(boiler_brand or updates.get("boiler_brand"))
-        is_complete = (result.diagnostic_complete or questions_remaining == 0) and has_brand
+        hit_limit = questions_remaining <= 0
+        is_complete = (result.diagnostic_complete or hit_limit) and has_brand
         updates["diagnostic_complete"] = is_complete
 
         if not is_complete:
@@ -131,8 +132,25 @@ def diagnostic_node(state: QuoteState) -> Dict[str, Any]:
                     question = "What make is your boiler? We service Vaillant, Baxi, Ideal, and LG."
                 else:
                     question = "Could you describe what's happening with your boiler or plumbing?"
-            updates["diagnostic_questions_asked"] = questions_asked + 1
+            # Only count symptom questions toward the limit, not brand gate
+            if has_brand:
+                updates["diagnostic_questions_asked"] = questions_asked + 1
             updates["next_diagnostic_question"] = question
+        elif is_complete and len(merged) < 2 and hit_limit:
+            # Hit question limit without enough concrete symptoms —
+            # offer a diagnostic visit instead of forcing a shaky quote.
+            phone = config["business"]["phone"]
+            visit_cfg = config["self_help_diagnostic_visit"]
+            updates["next_diagnostic_question"] = (
+                "I don't have quite enough detail to quote remotely, but no worries — "
+                f"we can send a **Gas Safe registered engineer** for a diagnostic visit "
+                f"at **£{visit_cfg['base_price']}**. "
+                f"*{visit_cfg['redeemable_note']}*\n\n"
+                "Would you like me to check available slots, or would you prefer to "
+                f"call us directly at **{phone}**?"
+            )
+            # Mark as needing the diagnostic visit flow
+            updates["pending_self_help_quote"] = True
         else:
             updates["next_diagnostic_question"] = None
 
