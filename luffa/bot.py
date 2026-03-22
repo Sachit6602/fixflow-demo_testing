@@ -80,8 +80,15 @@ def check_timeouts():
 
 def get_messages() -> list:
     """Poll Luffa for new incoming messages."""
-    r = requests.post(f"{LUFFA_BASE}/robot/receive", json={"secret": LUFFA_SECRET})
-    return r.json() if r.ok else []
+    try:
+        r = requests.post(f"{LUFFA_BASE}/robot/receive", json={"secret": LUFFA_SECRET}, timeout=5)
+        if not r.ok:
+            print(f"[Luffa] Poll failed: {r.status_code} {r.text[:100]}")
+            return []
+        return r.json()
+    except Exception as e:
+        print(f"[Luffa] Poll error: {e}")
+        return []
 
 
 def send_message(uid: str, text: str):
