@@ -106,10 +106,17 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
     if intent == "greeting":
         customer_name = state.get("customer_name", "")
         name_part = f", {customer_name}" if customer_name and customer_name != "Customer" else ""
-        text = (
-            f"Hey there{name_part}! Welcome to FixFlow — your 24/7 plumbing and boiler assistant. "
-            "How can I help you today?"
-        )
+        customer_type = state.get("customer_type", "new")
+        if customer_type == "returning":
+            text = (
+                f"Welcome back{name_part}! "
+                "How can I help you today?"
+            )
+        else:
+            text = (
+                f"Hey there{name_part}! I'm FixFlow — your 24/7 plumbing and boiler assistant. "
+                "How can I help you today?"
+            )
         return {
             "messages": [AIMessage(content=text)],
             "phase": "intake",

@@ -105,11 +105,10 @@ def send_message(uid: str, text: str):
     print(f"[Luffa] Sent to {uid}: {r.status_code}")
 
 
-def ensure_session(uid: str) -> tuple[str, bool]:
-    """Get or create a FixFlow session for this Luffa user.
-    Returns (session_id, just_created)."""
+def ensure_session(uid: str) -> str:
+    """Get or create a FixFlow session for this Luffa user."""
     if uid in active_sessions:
-        return active_sessions[uid], False
+        return active_sessions[uid]
 
     # Always create a fresh session — don't resume old server sessions
     # which may be in a dead/ended state.
@@ -126,10 +125,10 @@ def ensure_session(uid: str) -> tuple[str, bool]:
     status = "returning" if data["is_returning"] else "new"
     print(f"[FixFlow] Session created for {uid} ({status}): {session_id}")
 
-    # Send the welcome message to the user
-    send_message(uid, data["message"])
+    # Don't send welcome here — let the graph handle the first response
+    # so we always get exactly one message per user input.
     last_activity[uid] = time.time()
-    return session_id, True
+    return session_id
 
 
 def handle_text_message(uid: str, text: str):
@@ -146,13 +145,7 @@ def handle_text_message(uid: str, text: str):
         handle_slot_selection(uid, text)
         return
 
-    session_id, just_created = ensure_session(uid)
-
-    # If session was just created, the welcome message was already sent.
-    # Don't forward simple greetings — they'd produce a duplicate welcome.
-    if just_created and text.strip().lower() in ("hi", "hey", "hello", "hiya", "good morning", "good evening", "howdy", "yo"):
-        print(f"[Debug] {uid}: skipping greeting '{text}' — welcome already sent")
-        return
+    session_id = ensure_session(uid)
 
     resp = requests.post(
         f"{FIXFLOW_BASE}/api/chat",
@@ -208,7 +201,7 @@ def handle_slot_selection(uid: str, text: str):
         del pending_slot_selection[uid]
         print(f"[Booking] {uid} exited slot selection with: {repr(text)}")
         # Re-process as a normal message
-        session_id, _ = ensure_session(uid)
+        session_id = ensure_session(uid)
         resp = requests.post(
             f"{FIXFLOW_BASE}/api/chat",
             json={"session_id": session_id, "message": text},
