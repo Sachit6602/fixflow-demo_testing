@@ -20,8 +20,9 @@ Phase-based routing — each turn enters the graph at the correct node:
                             ├─ phase="diagnosis"       → diagnostic (same sub-graph as above)
                             │
                             ├─ phase="quoting"           → negotiation → authority_check → output_guard → END
-                            ├─ phase="self_help"         → self_help_followup → output_guard → END
                             ├─ phase="negotiating"       → negotiation → authority_check → output_guard → END
+                            ├─ phase="booked"            → output_guard (resets to intake) → END
+                            ├─ phase="self_help"         → self_help_followup → output_guard → END
                             ├─ phase="awaiting_postcode" → postcode_capture → pricing → negotiation → authority_check → output_guard → END
                             │
                             └─ phase="escalated"/"ended" → output_guard → END
@@ -74,10 +75,17 @@ def _route_input_guard(state: QuoteState) -> str:
         # Mid-diagnosis — go straight to diagnostic node
         return "diagnostic"
 
-    if phase in ("quoting", "negotiating", "booked"):
-        # Quote has been issued (or booking confirmed) — route through negotiation
+    if phase in ("quoting", "negotiating"):
+        # Quote has been issued — route through negotiation
         # so the customer can reschedule, ask questions, or accept a re-quote.
         return "negotiation"
+
+    if phase == "booked":
+        # Booking confirmed — go straight to output_guard (no LLM needed).
+        # output_guard resets to intake, so the next turn re-classifies via
+        # intent_classifier. If quote_issued is True, _route_intent sends
+        # to negotiation, preserving reschedule/follow-up capability.
+        return "output_guard"
 
     if phase == "self_help":
         # DIY steps were shown — check if they worked

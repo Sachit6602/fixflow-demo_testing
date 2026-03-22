@@ -48,9 +48,11 @@ def job_classifier_node(state: QuoteState) -> Dict[str, Any]:
     if state.get("job_type") is not None:
         return {}
 
-    # Pass through — diagnostic already determined out-of-scope (e.g. unsupported brand)
+    # Pass through — diagnostic already determined out-of-scope (e.g. unsupported brand).
+    # Explicitly propagate in_scope=False so the router sends to output_guard
+    # rather than relying on the diagnostic node's state alone.
     if not state.get("in_scope", True):
-        return {}
+        return {"in_scope": False}
 
     config = load_business_config()
     brands = ", ".join(config["supported_brands"])

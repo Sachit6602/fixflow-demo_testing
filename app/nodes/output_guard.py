@@ -170,6 +170,10 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             "otherwise I'd recommend contacting a specialist for your make and model."
         )
         text += "\n\nIs there anything else I can help you with?"
+        # Reset all diagnostic and classification state so the customer can
+        # start a completely fresh request in the same session.
+        # Recovery flow: phase="intake" → next turn routes to intent_classifier
+        # via _route_input_guard → re-classifies → new diagnostic cycle.
         return {
             "messages": [AIMessage(content=text)],
             "phase": "intake",
@@ -178,9 +182,18 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             "diagnostic_complete": False,
             "boiler_brand": None,
             "job_type": None,
+            "confidence_level": None,
             "symptoms": [],
             "diagnostic_questions_asked": 0,
             "next_diagnostic_question": None,
+            "escalation_flag": False,
+            "escalation_reason": None,
+            "calculated_price": None,
+            "final_price": None,
+            "base_price": None,
+            "quote_issued": False,
+            "self_help_offered": False,
+            "pending_self_help_quote": False,
         }
 
     # ── Diagnostic question ───────────────────────────────────────────────────
@@ -207,14 +220,27 @@ def output_guard_node(state: QuoteState) -> Dict[str, Any]:
             "phase": "escalated",
         }
 
+    # ── Awaiting postcode — deliver the postcode request ─────────────────────
+    # Fires when self_help_followup (or another node) sets phase to
+    # awaiting_postcode and provides a carrier message. Explicit check avoids
+    # relying on diagnostic_complete being True from an earlier turn.
+    if state.get("phase") == "awaiting_postcode" and next_q:
+        return {
+            "messages": [AIMessage(content=next_q)],
+            "phase": "awaiting_postcode",
+            "next_diagnostic_question": None,
+        }
+
     # ── Negotiation / booking / self-help carrier ───────────────────────────────
     # The carrier fires whenever any post-diagnostic node (negotiation, etc.)
     # sets next_diagnostic_question to a composed message ready for delivery.
+    # Resets intent so the next turn re-classifies if phase loops back to intake.
     if state.get("diagnostic_complete") and next_q:
         return {
             "messages": [AIMessage(content=next_q)],
             "phase": state.get("phase", "quoting"),
             "next_diagnostic_question": None,
+            "intent": None,
         }
 
     # ── Already booked ─────────────────────────────────────────────────────
