@@ -47,8 +47,10 @@ supported — the system will validate it.
    - Ask exactly ONE targeted follow-up per turn. No compound questions. No bullet lists.
    - Focus on: error code, hot water affected, boiler pressure, boiler age, symptom \
 duration, urgency.
-   - Set diagnostic_complete=True when you have enough to classify, or when \
-questions_remaining is 0.
+   - If the customer says they don't know or can't check (e.g. "can't see", "not sure", \
+"I don't know"), do NOT treat that as a symptom or complete the diagnosis. Instead, \
+skip that question and ask the next relevant one. Only set diagnostic_complete=True \
+when you have at least 2 concrete symptoms, or when questions_remaining is 0.
 
 3. POSTCODE: Do NOT ask for it — collected separately. If the customer volunteers \
 it, capture in postcode_extracted.
@@ -117,7 +119,7 @@ def diagnostic_node(state: QuoteState) -> Dict[str, Any]:
             updates["postcode"] = result.postcode_extracted
 
         # Force completion if at question limit — but NEVER complete without a brand
-        has_brand = boiler_brand or updates.get("boiler_brand")
+        has_brand = bool(boiler_brand or updates.get("boiler_brand"))
         is_complete = (result.diagnostic_complete or questions_remaining == 0) and has_brand
         updates["diagnostic_complete"] = is_complete
 
