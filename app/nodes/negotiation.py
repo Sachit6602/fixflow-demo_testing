@@ -202,6 +202,14 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
             floor = float(state.get("floor_price") or 0.0)
             new_price = max(new_price, floor)
 
+            # Reapply existing discount if one was negotiated
+            existing_discount = state.get("discount_pct", 0.0)
+            if existing_discount > 0:
+                discounted = new_price * (1 - existing_discount / 100)
+                new_final = max(round(discounted, 2), floor)
+            else:
+                new_final = new_price
+
             # Resolve date placeholders to human-readable dates.
             raw_slots = availability_data["slots"].get(tier, [])[:3]
             slots = resolve_slot_dates(raw_slots)
@@ -216,7 +224,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
                 f"Of course — here are the available slots for your "
                 f"**{job_label}** visit:\n\n"
                 f"{slot_lines}\n\n"
-                f"Price: **\u00a3{new_price:.2f}** | Reference: `{ref}`\n\n"
+                f"Price: **\u00a3{new_final:.2f}** | Reference: `{ref}`\n\n"
                 f"Reply with the slot number you'd prefer."
             )
             return {
@@ -225,7 +233,7 @@ def negotiation_node(state: QuoteState) -> Dict[str, Any]:
                 "urgency_tier": tier,
                 "urgency_multiplier": new_multiplier,
                 "calculated_price": new_price,
-                "final_price": new_price,
+                "final_price": new_final,
                 "booking_confirmed": False,
                 "phase": "quoting",
             }

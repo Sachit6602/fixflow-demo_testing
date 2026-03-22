@@ -31,7 +31,7 @@ parts: 1
 - engineers.json: engineer schedules with postcodes for dynamic availability slot generation via postcodes.io geocoding + haversine travel time estimation
 - availability.json: static fallback slots when customer postcode unavailable or geocoding fails
 - LangSmith: mandatory tracing integration (LANGCHAIN_TRACING_V2=true); node-by-node execution, inputs/outputs, latency; visible to judges in real time
-- Channels: Luffa messaging bot (primary demo channel) + REST API + basic web frontend
+- Channels: Luffa messaging bot (primary and only demo channel) + REST API (backend)
 - Data storage: session state in-memory (LangGraph MemorySaver); user identity and quote history persisted to Supabase for returning-user detection
 - PII protection: all LLM-calling nodes use get_safe_messages() to mask postcodes and phone numbers before model processing
 - Structured outputs: every LLM call uses Pydantic models (.with_structured_output()) to prevent hallucination and runtime key errors
@@ -57,19 +57,23 @@ parts: 1
 - Scope check in Job Classifier node logic, not LLM prompt — prevents out-of-scope hallucination
 - Output Guard: ONLY node that adds AI messages to state; strips internal fields (cost price, margin, capacity data, engineer names)
 - /end command: explicit session termination detected in Input Guard before any other processing
+- Farewell intent: "no thanks", "bye", "that's all" detected by Intent Classifier → warm goodbye with phone number → session ended
 - Session timeout: 2-minute inactivity timeout sends notification and clears session
+- No abrupt endings: every terminal state (out-of-scope, post-quote, self-help resolved, booking confirmed) asks "Is there anything else I can help you with?" and resets to intake phase; only /end, farewell, safety, and timeout produce actual session termination
 - NFR: gas-smell hard stop must fire on 100% of inputs with gas-leak indicators; 0 false negatives permitted
 - NFR: 100% graceful out-of-scope escalation for any service/brand/job/location not in business_config.json; 0 hallucinated responses permitted
 
 ## Key Differentiators
-- Diagnostic-first: structured diagnostic node with brand gate (must confirm boiler brand before symptom collection); extracts symptoms via max 5-question exchange; produces job classification with confidence level; quotes scoped to actual job not generic range
+- Diagnostic-first: structured diagnostic node with brand gate (must confirm boiler brand before symptom collection); brand gate questions don't count toward the 5-question limit; extracts symptoms via max 5 symptom questions; "I don't know" answers are skipped (not treated as symptoms); if <2 concrete symptoms after question limit, offers diagnostic visit instead of forcing a shaky quote
 - Self-help path: for jobs with DIY steps in config, agent shows self-help instructions before quoting; if unresolved, offers discounted diagnostic visit (£65, redeemable against repair)
-- Config-bounded scope: agent only knows what business_config.json defines; anything outside (unsupported brands, out-of-area, undefined job types) is escalated not answered
+- Graceful session lifecycle: sessions never end abruptly; every terminal state asks "Is there anything else I can help you with?"; farewell intent ("no thanks", "bye") triggers warm goodbye; only /end, farewell, safety hard-stop, and 2-minute timeout close sessions
+- Config-bounded scope: agent only knows what business_config.json defines; anything outside (unsupported brands, out-of-area, undefined job types) is gracefully declined with follow-up offer; out-of-scope resets diagnostic state so customer can start a new request in the same session
 - Full LangSmith observability: judges see node-by-node trace, inputs/outputs, latency, branching logic per conversation; no custom observability infrastructure required
 - Authority limits enforced structurally: no quote >£800 auto-confirmed; replacement jobs always escalated
-- Returning user detection: automatic via Luffa uid + Supabase quote history; loyalty discount applied without self-declaration; never downgrades uid-verified returning status
+- Returning user detection: automatic via Luffa uid + Supabase quote history; customer name loaded from Supabase for personalised greetings; loyalty discount applied without self-declaration; never downgrades uid-verified returning status
 - PII-safe LLM calls: postcodes and phone numbers masked before any model invocation; postcode lookup done in pure code
 - Dynamic availability: engineer travel time calculated via postcodes.io geocoding + haversine distance; slots sorted by earliest arrival, deduped by hour
+- Negotiation awareness: LLM sees both original and current (discounted) price; reschedule requests recalculate price for new urgency tier; booking without slot number prompts for slot selection instead of silently defaulting
 
 ## Pricing & Authority Rules
 - Urgency tiers: same-day (×1.5), evening/weekend (×1.5), next-day (×1.0), weekday_afternoon (×0.85)
@@ -107,9 +111,9 @@ parts: 1
 - FR1–4: session start/unique ID; multi-turn state; in-session quote retrieval
 - FR5: prompt injection detection and block before any processing
 - FR6: gas-smell/gas-leak detection → immediate hard stop from any stage
-- FR7: intent classification (greeting/quote request/general enquiry/complaint/emergency) with routing; greetings and non-quote intents keep session alive for re-classification
+- FR7: intent classification (greeting/quote request/general enquiry/complaint/emergency/farewell) with routing; greetings and non-quote intents keep session alive for re-classification; farewell intent ("no thanks", "bye") triggers graceful goodbye
 - FR8: safety-triggered conversations redirect to emergency services with contact info
-- FR9–11: max 5-question diagnostic exchange; structured symptom extraction; terminate after 4 exchanges if needed
+- FR9–11: max 5 symptom questions (brand gate excluded from count); structured symptom extraction; "I don't know" responses skipped not treated as symptoms; if <2 symptoms after limit, diagnostic visit offered instead of forced quote
 - FR12: symptom → job type + confidence (high/medium/low)
 - FR13: validate all requests against business_config.json; decline anything outside
 - FR14: boiler replacement detection → auto-escalate regardless of authority level
@@ -119,7 +123,7 @@ parts: 1
 - FR18: ULEZ surcharge by postcode zone
 - FR19: price = f(job type, confidence, urgency tier, postcode zone)
 - FR20: parts estimate in price where applicable
-- FR21–25: negotiation — floor price enforcement; new/returning customer discount tiers; competitor match refusal; value-based hold
+- FR21–25: negotiation — floor price enforcement; new/returning customer discount tiers; competitor match refusal; value-based hold; reschedule recalculates price for new urgency tier; booking without slot prompts for selection; LLM aware of both original and discounted price
 - FR26–28: authority tiers — auto-confirm <threshold; flag for review in range; hard-block above ceiling
 - FR29: strip internal fields (cost price, margin, capacity data, engineer names) from customer-facing responses
 - FR30: quote with unique reference number, validity window, next steps
@@ -128,8 +132,11 @@ parts: 1
 - FR36 (new): returning user detection via Luffa uid + Supabase quote history; loyalty discount auto-applied
 - FR37 (new): self-help flow — show DIY steps before quoting for eligible jobs; diagnostic visit offered if unresolved
 - FR38 (new): postcode-deferred pricing — quote flow pauses to collect postcode before ULEZ calculation
-- FR39 (new): /end command for explicit session termination; 2-minute inactivity timeout
-- FR40 (new): Luffa bot integration — polling adapter with slot selection and payment flows
+- FR39 (new): /end command for explicit session termination; farewell intent for natural goodbyes; 2-minute inactivity timeout; no abrupt session endings — always ask follow-up first
+- FR40 (new): Luffa bot integration — polling adapter with slot selection and payment flows; non-blocking payment processing; session kept alive after payment confirm/cancel with follow-up prompt
+- FR41 (new): Supabase customer name used for personalised greetings ("Welcome back, Kenneth!"); returning users greeted differently from new users
+- FR42 (new): diagnostic visit fallback — when diagnostic cannot gather enough symptoms (<2 concrete symptoms after question limit), offers £65 engineer diagnostic visit instead of forcing low-confidence quote
+- FR43 (new): out-of-scope recovery — unsupported brand/job gracefully declined with "anything else?" follow-up; diagnostic state reset so customer can start new request in same session
 
 ## Non-Functional Requirements
 - NFR1: complete quote response <60s for Scenario 1 (happy path)
@@ -142,8 +149,8 @@ parts: 1
 - NFR8: 100% graceful out-of-scope escalation; 0 hallucinated responses outside configured knowledge base
 
 ## Scope Boundaries
-- In: 11-node LangGraph agent; business_config.json + engineers.json; FastAPI 7-endpoint API; LangSmith tracing; Luffa bot integration; Supabase persistence; basic web frontend; Railway deployment; 6 demo scenarios
-- Delivered beyond original MVP: Luffa chat channel, Supabase user persistence, dynamic engineer availability, self-help flows, postcode-deferred pricing, PII masking, returning user detection
+- In: 11-node LangGraph agent; business_config.json + engineers.json; FastAPI 7-endpoint API; LangSmith tracing; Luffa bot integration (primary channel); Supabase persistence; Railway deployment; 6 demo scenarios
+- Delivered beyond original MVP: Luffa chat channel, Supabase user persistence + personalised greetings, dynamic engineer availability, self-help flows, postcode-deferred pricing, PII masking, returning user detection, farewell intent, graceful session lifecycle, diagnostic visit fallback, out-of-scope recovery, non-blocking payment, negotiation price awareness
 - Out (current): multi-tenancy, real calendar/booking integration, production SaaS surfaces
 - Deferred (Phase 2): multi-trades config (electrician, locksmith), email/WhatsApp channels, admin portal, human oversight mobile notifications
 - Deferred (Phase 3): any-vertical deployment via config swap; continuous learning from quote outcomes
@@ -156,9 +163,14 @@ parts: 1
 - Build risk: lock QuoteState schema and node signatures in first 2 hours; Scenario 1 E2E is integration test; script all 6 scenarios as pre-written Postman message sequences
 
 ## Risks
-- LLM answers out-of-scope questions despite config — mitigated: scope check in Job Classifier node logic, not LLM prompt
+- LLM answers out-of-scope questions despite config — mitigated: scope check in Job Classifier node logic, not LLM prompt; job classifier passes through when diagnostic already set out-of-scope
 - Gas-smell detection misses paraphrased inputs — mitigated: keyword list covers sulphur/rotten eggs/gas smell/gas leak variants
 - Authority limits bypassed via social engineering — mitigated: Authority Check runs after Negotiation, cannot be negotiated away
+- Diagnostic completes prematurely on vague answers — mitigated: prompt instructs LLM to skip "I don't know" answers; <2 symptoms triggers diagnostic visit instead of shaky quote
+- Python truthiness bug in diagnostic_complete — mitigated: `bool()` wrapper ensures boolean, not brand string leaking via `True and "LG"` → `"LG"`
+- Pricing node errors on diagnostic visit path (no job_type) — mitigated: pricing passes through when pending_self_help_quote is set
+- Double welcome message on Luffa — mitigated: welcome sent only via graph (greeting intent), not from session start endpoint; bot no longer sends welcome from ensure_session
+- Negotiation LLM sees stale price after discount — mitigated: both original and current (discounted) price shown in system prompt
 - LangGraph graph wiring time overrun — mitigated: lock schema first 2 hours
 - Integration failures at hour 10 — mitigated: Scenario 1 E2E as integration test
 - Demo instability on the day — mitigated: pre-scripted Postman collections for all 6 scenarios

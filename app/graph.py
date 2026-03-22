@@ -157,6 +157,7 @@ def build_graph() -> StateGraph:
         {
             "output_guard": "output_guard",
             "diagnostic":   "diagnostic",
+            "negotiation":  "negotiation",
         },
     )
     builder.add_conditional_edges(
