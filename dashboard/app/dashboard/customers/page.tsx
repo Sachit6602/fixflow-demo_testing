@@ -1,15 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { KpiCard } from "@/components/dashboard/kpi-card"
+import { useDataSource } from "@/lib/data-context"
 import {
-  kpiCustomers,
-  newVsReturning,
-  topPostcodes,
-  peakHoursData,
-  customers,
-} from "@/lib/sample-data"
+  getKpiCustomers,
+  getNewVsReturning,
+  getTopPostcodes,
+  getPeakHoursData,
+  getCustomers,
+} from "@/lib/data-provider"
 import {
   PieChart,
   Pie,
@@ -32,14 +33,48 @@ function getHeatColor(value: number, max: number) {
   return "bg-blue-700 dark:bg-blue-500"
 }
 
-const maxHeat = Math.max(...peakHoursData.flatMap((d) => d.map((h) => h.value)))
-
 export default function CustomersPage() {
+  const { isLive } = useDataSource()
+  const [kpi, setKpi] = useState<any>(null)
+  const [nvr, setNvr] = useState<any[]>([])
+  const [postcodes, setPostcodes] = useState<any[]>([])
+  const [peakHours, setPeakHours] = useState<any[][]>([])
+  const [customerList, setCustomerList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "totalSpent" | "totalQuotes">("totalSpent")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-  const filtered = customers
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      getKpiCustomers(isLive),
+      getNewVsReturning(isLive),
+      getTopPostcodes(isLive),
+      getPeakHoursData(isLive),
+      getCustomers(isLive),
+    ]).then(([k, n, p, ph, c]) => {
+      if (cancelled) return
+      setKpi(k); setNvr(n); setPostcodes(p); setPeakHours(ph); setCustomerList(c)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [isLive])
+
+  if (loading || !kpi) {
+    return (
+      <div className="p-6 max-w-[1400px] mx-auto">
+        <PageHeader title="Customers" description="Customer behaviour and demographics" />
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  const maxHeat = Math.max(...peakHours.flatMap((d) => d.map((h: any) => h.value)), 1)
+
+  const filtered = customerList
     .filter((c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.postcode.toLowerCase().includes(search.toLowerCase())
@@ -64,13 +99,13 @@ export default function CustomersPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <KpiCard title="Total Customers" value={kpiCustomers.totalCustomers.value} change={kpiCustomers.totalCustomers.change} />
+        <KpiCard title="Total Customers" value={kpi.totalCustomers.value} change={kpi.totalCustomers.change} />
         <KpiCard
           title="Returning Customers"
-          value={kpiCustomers.returningCustomers.value}
-          badge={{ label: `${kpiCustomers.returningCustomers.percentage}% of total`, variant: "blue" }}
+          value={kpi.returningCustomers.value}
+          badge={{ label: `${kpi.returningCustomers.percentage}% of total`, variant: "blue" }}
         />
-        <KpiCard title="Avg Quote Value" value={kpiCustomers.avgQuoteValue.value.toFixed(2)} prefix="£" change={kpiCustomers.avgQuoteValue.change} />
+        <KpiCard title="Avg Quote Value" value={kpi.avgQuoteValue.value.toFixed(2)} prefix="£" change={kpi.avgQuoteValue.change} />
       </div>
 
       {/* New vs Returning + Top Postcodes */}
@@ -80,7 +115,7 @@ export default function CustomersPage() {
           <h2 className="text-sm font-semibold text-foreground mb-4">New vs Returning</h2>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={newVsReturning} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={4}>
+              <Pie data={nvr} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={4}>
                 <Cell fill="var(--chart-1)" />
                 <Cell fill="var(--chart-2)" />
               </Pie>
@@ -106,7 +141,7 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {topPostcodes.map((row) => (
+                {postcodes.map((row) => (
                   <tr key={row.postcode} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
                     <td className="py-2.5 pr-4 font-semibold text-primary">{row.postcode}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{row.area}</td>
@@ -133,7 +168,7 @@ export default function CustomersPage() {
               ))}
             </div>
             {/* Grid */}
-            {peakHoursData.map((dayData) => (
+            {peakHours.map((dayData) => (
               <div key={dayData[0].day} className="flex items-center gap-0.5 mb-0.5">
                 <div className="w-10 text-[11px] text-muted-foreground font-medium text-right pr-2 shrink-0">{dayData[0].day}</div>
                 {dayData.map((cell) => (
