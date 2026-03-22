@@ -276,6 +276,7 @@ def process(data):
         return
 
     for conversation in data:
+        print(f"[Luffa] Full conversation payload: {json.dumps(conversation, indent=2, default=str)}")
         uid = conversation.get("uid")
         msg_type = conversation.get("type")
 
