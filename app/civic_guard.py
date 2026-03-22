@@ -22,7 +22,7 @@ _TIMEOUT_SECONDS = 3  # keep latency tight — fallback handles failures
 
 
 def _get_api_key() -> Optional[str]:
-    return os.environ.get("CIVIC_API_KEY")
+    return os.environ.get("CIVIC_KEY") or os.environ.get("CIVIC_API_KEY")
 
 
 def check_injection(text: str, threshold: float = 0.5) -> Optional[Dict[str, Any]]:
