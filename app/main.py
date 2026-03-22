@@ -156,9 +156,14 @@ async def start_luffa_session(req: LuffaStartRequest) -> LuffaStartResponse:
     """
     from app import persistence
 
-    persistence.get_or_create_user(req.luffa_uid, req.customer_name)
+    user_record = persistence.get_or_create_user(req.luffa_uid, req.customer_name)
     is_returning = persistence.is_returning_user(req.luffa_uid)
     customer_type = "returning" if is_returning else "new"
+
+    # Use the name from Supabase if available, otherwise fall back to request
+    customer_name = user_record.get("customer_name") or req.customer_name
+    if customer_name == "Customer":
+        customer_name = ""  # Don't greet with generic "Customer"
 
     session_id = str(uuid.uuid4())
     graph = get_graph()
@@ -166,7 +171,7 @@ async def start_luffa_session(req: LuffaStartRequest) -> LuffaStartResponse:
 
     seed = initial_state(
         session_id=session_id,
-        customer_name=req.customer_name,
+        customer_name=customer_name or "Customer",
         customer_type=customer_type,
         luffa_uid=req.luffa_uid,
     )
@@ -176,16 +181,16 @@ async def start_luffa_session(req: LuffaStartRequest) -> LuffaStartResponse:
     _uid_sessions[req.luffa_uid] = session_id
     _session_uids[session_id] = req.luffa_uid
 
+    name_part = f", {customer_name}" if customer_name else ""
     if is_returning:
         welcome = (
-            f"Welcome back, {req.customer_name}! Great to see you again. "
-            "As a returning customer, your loyalty discount will be automatically applied to your quote. "
-            "What can we help you with today?"
+            f"Welcome back{name_part}! "
+            "How can I help you today?"
         )
     else:
         welcome = (
-            f"Hi {req.customer_name}! I'm FixFlow, your 24/7 plumbing and boiler quote assistant. "
-            "Describe your problem and I'll have a quote ready for you in under 60 seconds."
+            f"Hi{name_part}! I'm FixFlow — your 24/7 plumbing and boiler assistant. "
+            "How can I help you today?"
         )
 
     return LuffaStartResponse(session_id=session_id, is_returning=is_returning, message=welcome)
